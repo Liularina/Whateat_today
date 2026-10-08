@@ -1,0 +1,8 @@
+<view class="error-state">
+  <view class="error-state__emoji">😥</view>
+  <view class="error-state__title">{{title}}</view>
+  <view class="error-state__desc" wx:if="{{description}}">{{description}}</view>
+  <view class="error-state__retry" hover-class="error-state__retry--hover" bindtap="onRetry">
+    {{retryText}}
+  </view>
+</view>

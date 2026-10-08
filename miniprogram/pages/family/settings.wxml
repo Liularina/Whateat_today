@@ -1,0 +1,146 @@
+<view class="page page--with-footer">
+  <view class="page-header">
+    <view class="page-header__title">家庭设置</view>
+  </view>
+
+  <view class="card" wx:if="{{!ready}}">
+    <view class="card__desc">正在加载家庭信息…</view>
+  </view>
+
+  <view class="card" wx:elif="{{!isInFamily}}">
+    <view class="card__title">暂无家庭</view>
+    <view class="card__desc">{{error || '你还没有加入家庭。'}}</view>
+    <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onCancel">返回</view>
+  </view>
+
+  <block wx:else>
+    <!-- 普通成员：只读 -->
+    <view class="notice" wx:if="{{!isOwner}}">你是普通成员，可以查看但不能修改家庭设置。</view>
+    <view class="form-error" wx:if="{{error}}">{{error}}</view>
+
+    <view class="card">
+      <view class="field__label">家庭名称</view>
+      <input
+        class="field__input {{isOwner ? '' : 'field__input--readonly'}}"
+        type="text"
+        maxlength="{{nameMaxLength}}"
+        placeholder="例如：我们家"
+        placeholder-class="field__placeholder"
+        value="{{name}}"
+        disabled="{{!isOwner}}"
+        bindinput="onNameInput"
+      />
+    </view>
+
+    <view class="card">
+      <view class="field__label">默认人数</view>
+      <view class="chips">
+        <view
+          class="chip {{item.active ? 'chip--active' : ''}}"
+          wx:for="{{peopleOptions}}"
+          wx:key="value"
+          bindtap="onSelectPeople"
+          data-value="{{item.value}}"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="field__label">默认口味（可多选）</view>
+      <view class="chips">
+        <view
+          class="chip {{item.active ? 'chip--active' : ''}}"
+          wx:for="{{tasteOptions}}"
+          wx:key="label"
+          bindtap="onToggleTaste"
+          data-index="{{index}}"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="field__label">默认烹饪时间</view>
+      <view class="chips">
+        <view
+          class="chip {{item.active ? 'chip--active' : ''}}"
+          wx:for="{{cookTimeOptions}}"
+          wx:key="value"
+          bindtap="onSelectCookTime"
+          data-value="{{item.value}}"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="field__label">默认忌口（可多选、可自定义）</view>
+      <view class="chips">
+        <view
+          class="chip {{item.active ? 'chip--active' : ''}}"
+          wx:for="{{avoidOptions}}"
+          wx:key="label"
+          bindtap="onToggleAvoid"
+          data-index="{{index}}"
+        >{{item.label}}</view>
+      </view>
+      <block wx:if="{{isOwner}}">
+        <view class="custom-row">
+          <input
+            class="custom-row__input"
+            type="text"
+            maxlength="{{tagMaxLength}}"
+            placeholder="自定义忌口，例如：不吃内脏"
+            placeholder-class="field__placeholder"
+            value="{{customAvoid}}"
+            bindinput="onCustomAvoidInput"
+          />
+          <view class="custom-row__btn" bindtap="onAddCustomAvoid">添加</view>
+        </view>
+      </block>
+    </view>
+
+    <view class="card">
+      <view class="field__label">默认过敏（可多选、可自定义）</view>
+      <view class="chips">
+        <view
+          class="chip {{item.active ? 'chip--active' : ''}}"
+          wx:for="{{allergenOptions}}"
+          wx:key="label"
+          bindtap="onToggleAllergen"
+          data-index="{{index}}"
+        >{{item.label}}</view>
+      </view>
+      <block wx:if="{{isOwner}}">
+        <view class="custom-row">
+          <input
+            class="custom-row__input"
+            type="text"
+            maxlength="{{tagMaxLength}}"
+            placeholder="自定义过敏原，例如：芒果"
+            placeholder-class="field__placeholder"
+            value="{{customAllergen}}"
+            bindinput="onCustomAllergenInput"
+          />
+          <view class="custom-row__btn" bindtap="onAddCustomAllergen">添加</view>
+        </view>
+      </block>
+    </view>
+
+    <!-- 解散家庭：仅管理员可见，服务端会再次校验 owner -->
+    <view class="card card--flat" wx:if="{{isOwner}}">
+      <view class="card__title">解散家庭</view>
+      <view class="card__desc">解散后所有成员都将无法继续访问该家庭，请谨慎操作。</view>
+      <view class="wte-btn wte-btn--danger wte-btn--block" bindtap="onDissolveFamily">解散家庭</view>
+    </view>
+  </block>
+</view>
+
+<view class="footer-bar" wx:if="{{ready && isInFamily}}">
+  <view class="footer-actions">
+    <view class="wte-btn wte-btn--plain footer-actions__item" bindtap="onCancel">取消</view>
+    <view
+      class="wte-btn wte-btn--primary footer-actions__item {{saving ? 'wte-btn--busy' : ''}}"
+      wx:if="{{isOwner}}"
+      bindtap="onSave"
+    >{{saving ? '保存中...' : '保存'}}</view>
+  </view>
+</view>

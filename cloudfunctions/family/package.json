@@ -1,0 +1,9 @@
+{
+  "name": "family",
+  "version": "1.0.0",
+  "description": "今天吃什么 · family 云函数（家庭创建 / 加入 / 成员 / 偏好）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

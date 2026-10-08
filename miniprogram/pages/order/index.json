@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "点菜",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index",
+    "t-button": "tdesign-miniprogram/button/button"
+  }
+}

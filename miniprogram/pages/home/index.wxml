@@ -1,0 +1,88 @@
+<view class="page">
+  <view class="page-header">
+    <view class="page-header__title">今天吃什么？</view>
+
+    <!-- 正在登录：不展示失败态，避免启动瞬间闪一下错误 -->
+    <view class="page-header__subtitle" wx:if="{{!authReady}}">正在登录…</view>
+
+    <!-- 登录失败 / 网络异常：给出可重试的明确提示，不白屏 -->
+    <block wx:elif="{{!isLoggedIn}}">
+      <view class="page-header__subtitle">{{authError || '登录失败，请稍后重试'}}</view>
+      <view class="login-retry" bindtap="onRetryLogin" hover-class="login-retry--hover">重新登录</view>
+    </block>
+
+    <!-- 已登录 -->
+    <block wx:else>
+      <view class="page-header__subtitle">{{greeting}}</view>
+      <view class="login-warning" wx:if="{{authError}}">{{authError}}</view>
+    </block>
+  </view>
+
+  <!-- 家庭状态：无家庭不强制跳转，用户可以先浏览其它内容 -->
+  <block wx:if="{{isLoggedIn}}">
+    <!-- 家庭信息确认前不展示任何家庭引导，避免闪一下 -->
+    <block wx:if="{{familyReady}}">
+      <view
+        class="family-card"
+        wx:if="{{isInFamily}}"
+        bindtap="onGoFamily"
+        hover-class="family-card--hover"
+      >
+        <view class="family-card__emoji">🏠</view>
+        <view class="family-card__body">
+          <view class="family-card__name">{{familyName}}</view>
+          <view class="family-card__meta">{{memberCount}} 位成员</view>
+        </view>
+        <view class="family-card__arrow">›</view>
+      </view>
+
+      <view class="family-guide" wx:else>
+        <view class="family-guide__title">你还没有家庭</view>
+        <view class="family-guide__desc">创建一个家庭，和家人一起决定今晚吃什么。</view>
+        <view class="family-guide__actions">
+          <view class="wte-btn wte-btn--primary" bindtap="onGoCreateFamily">创建家庭</view>
+          <view class="wte-btn wte-btn--ghost" bindtap="onGoJoinFamily">加入家庭</view>
+        </view>
+      </view>
+
+      <view class="login-warning" wx:if="{{familyError}}">{{familyError}}</view>
+    </block>
+  </block>
+
+  <!-- 第二视觉层级：根据冰箱食材推荐 -->
+  <view class="hero" bindtap="onStartRecommend" hover-class="hero--hover">
+    <view class="hero__emoji">🍳</view>
+    <view class="hero__text">
+      <view class="hero__title">根据冰箱食材推荐</view>
+      <view class="hero__desc">按人数、口味、忌口安排 3 套菜单</view>
+    </view>
+    <view class="hero__arrow">›</view>
+  </view>
+
+  <!-- 第三视觉层级：次入口 -->
+  <view class="quick-actions">
+    <view class="quick-actions__item" bindtap="onGoIngredients" hover-class="quick-actions__item--hover">
+      <view class="quick-actions__emoji">🧺</view>
+      <view class="quick-actions__label">添加食材</view>
+    </view>
+    <view class="quick-actions__item" bindtap="onGoOrder" hover-class="quick-actions__item--hover">
+      <view class="quick-actions__emoji">📣</view>
+      <view class="quick-actions__label">家庭点菜</view>
+    </view>
+    <view class="quick-actions__item" bindtap="onGoFamily" hover-class="quick-actions__item--hover">
+      <view class="quick-actions__emoji">👨‍👩‍👧</view>
+      <view class="quick-actions__label">我的家庭</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section__title">今日菜单</view>
+    <empty-state
+      emoji="🍽️"
+      title="今天还没有决定吃什么"
+      description="点上面的按钮，让 AI 帮全家安排好今晚"
+      actionText="开始推荐"
+      bind:action="onStartRecommend"
+    />
+  </view>
+</view>

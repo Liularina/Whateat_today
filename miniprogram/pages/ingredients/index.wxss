@@ -1,0 +1,188 @@
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.head__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  margin-left: 24rpx;
+}
+
+.head__actions .head__add + .head__add {
+  margin-top: 12rpx;
+}
+
+.head__add {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+/* 次要入口：描边样式，不与主操作抢视觉 */
+.head__add--ghost {
+  background: #ffffff;
+  color: #9a8c7d;
+  border: 2rpx solid var(--wte-line);
+  font-weight: 500;
+}
+
+.actions {
+  margin-top: 40rpx;
+}
+
+.actions__second {
+  margin-top: 24rpx;
+}
+
+.error-tip {
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fdecee;
+  color: #c0392b;
+  font-size: 26rpx;
+}
+
+/* ---------------- 表单面板 ---------------- */
+
+.sheet-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(47, 38, 32, 0.45);
+  z-index: 10;
+}
+
+.sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  max-height: 84vh;
+  padding: 32rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: var(--wte-card);
+  border-radius: 32rpx 32rpx 0 0;
+  box-sizing: border-box;
+}
+
+.sheet__title {
+  font-size: 34rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sheet__body {
+  flex: 1;
+  min-height: 0;
+  margin-top: 24rpx;
+}
+
+.field {
+  margin-bottom: 28rpx;
+}
+
+.field__label {
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.field__input {
+  height: 88rpx;
+  padding: 0 24rpx;
+  background: #f7f2ec;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  box-sizing: border-box;
+}
+
+.field__row {
+  display: flex;
+  align-items: center;
+}
+
+.field__grow {
+  flex: 1;
+}
+
+.field__input--qty {
+  flex: 1;
+  min-width: 0;
+}
+
+.field__picker {
+  margin-left: 20rpx;
+}
+
+.field__picker-value {
+  min-width: 120rpx;
+  height: 88rpx;
+  padding: 0 24rpx;
+  line-height: 88rpx;
+  text-align: center;
+  background: #f7f2ec;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+}
+
+.field__picker-value--block {
+  width: 100%;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.field__clear {
+  padding: 0 20rpx;
+  font-size: 26rpx;
+  color: #b3a79b;
+}
+
+.field__hint {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.form-error {
+  margin-top: 8rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fdecee;
+  color: #c0392b;
+  font-size: 26rpx;
+}
+
+.sheet__footer {
+  display: flex;
+  align-items: center;
+  margin-top: 24rpx;
+}
+
+.sheet__btn {
+  height: 88rpx;
+}
+
+.sheet__btn + .sheet__btn {
+  margin-left: 20rpx;
+}
+
+.sheet__btn--main {
+  flex: 1;
+}
+
+.sheet__btn--danger {
+  background: #fdecee;
+  color: #c0392b;
+}

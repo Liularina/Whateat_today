@@ -1,0 +1,18 @@
+node_modules/
+miniprogram_npm/
+cloudfunctions/**/node_modules/
+
+# 微信开发者工具本地私有配置（含个人 AppID、编译模式等）
+project.private.config.json
+
+# 本地环境变量，禁止提交任何 LLM API Key
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+Thumbs.db
+
+# e2e 模拟器截图产物
+.e2e-shots/

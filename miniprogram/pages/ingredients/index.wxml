@@ -1,0 +1,169 @@
+<view class="page page--with-footer">
+  <view class="head">
+    <view>
+      <view class="page-header__title">我的食材</view>
+      <view class="page-header__subtitle" wx:if="{{hasFamily}}">共 {{ingredients.length}} 种食材</view>
+    </view>
+    <view class="head__actions" wx:if="{{hasFamily}}">
+      <view class="head__add" bindtap="onOpenCreate">+ 添加食材</view>
+      <view class="head__add head__add--ghost" bindtap="onOpenNutrition">营养估算</view>
+    </view>
+  </view>
+
+  <!-- 登录初始化中 -->
+  <loading-state wx:if="{{!authReady}}" text="正在准备..." />
+
+  <block wx:elif="{{!isLoggedIn}}">
+    <empty-state
+      emoji="🔐"
+      title="还没有登录"
+      description="登录后就能管理家里的食材了"
+    />
+  </block>
+
+  <!-- 「没有家庭」是正常状态：食材属于家庭，先引导建家 -->
+  <block wx:elif="{{!hasFamily}}">
+    <empty-state
+      emoji="🏠"
+      title="你还没有家庭"
+      description="食材按家庭共享，先创建或加入一个家庭吧"
+    />
+    <view class="actions">
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onGoCreateFamily">创建家庭</view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block actions__second" bindtap="onGoJoinFamily">加入家庭</view>
+    </view>
+  </block>
+
+  <loading-state wx:elif="{{loading && ingredients.length === 0}}" text="正在加载食材..." />
+
+  <!-- 列表加载失败：给明确提示与重试，不白屏 -->
+  <error-state
+    wx:elif="{{error && ingredients.length === 0}}"
+    title="食材加载失败"
+    description="{{error}}"
+    bind:retry="onRetry"
+  />
+
+  <block wx:else>
+    <view class="error-tip" wx:if="{{error}}">{{error}}</view>
+
+    <view class="card" wx:if="{{ingredients.length > 0}}">
+      <ingredient-item
+        wx:for="{{ingredients}}"
+        wx:key="_id"
+        item="{{item}}"
+        index="{{index}}"
+        categoryLabel="{{item.categoryLabel}}"
+        bind:edit="onEditIngredient"
+        bind:delete="onDeleteIngredient"
+      />
+    </view>
+
+    <empty-state
+      wx:else
+      emoji="🧺"
+      title="冰箱里还没有食材"
+      description="先添加食材，推荐才会更贴合你家的实际情况"
+      actionText="添加食材"
+      bind:action="onOpenCreate"
+    />
+  </block>
+</view>
+
+<!-- ---------------- 添加 / 编辑表单面板 ---------------- -->
+<view class="sheet-mask" wx:if="{{formVisible}}" bindtap="onCloseForm"></view>
+
+<view class="sheet" wx:if="{{formVisible}}">
+  <view class="sheet__title">{{formTitle}}</view>
+
+  <scroll-view class="sheet__body" scroll-y>
+    <view class="field">
+      <view class="field__label">名称</view>
+      <input
+        class="field__input"
+        value="{{formName}}"
+        placeholder="例如：番茄、鸡蛋"
+        maxlength="20"
+        bindinput="onNameInput"
+      />
+    </view>
+
+    <view class="field">
+      <view class="field__label">数量</view>
+      <view class="field__row">
+        <input
+          class="field__input field__input--qty"
+          type="digit"
+          value="{{formQuantity}}"
+          placeholder="0"
+          bindinput="onQuantityInput"
+        />
+        <picker
+          class="field__picker"
+          mode="selector"
+          range="{{unitLabels}}"
+          value="{{formUnitIndex}}"
+          bindchange="onUnitChange"
+        >
+          <view class="field__picker-value">{{unitLabels[formUnitIndex]}}</view>
+        </picker>
+      </view>
+      <view class="field__hint" wx:if="{{quantityHint}}">已换算为 {{quantityHint}}</view>
+    </view>
+
+    <view class="field">
+      <view class="field__label">分类</view>
+      <picker
+        mode="selector"
+        range="{{categoryLabels}}"
+        value="{{formCategoryIndex}}"
+        bindchange="onCategoryChange"
+      >
+        <view class="field__picker-value field__picker-value--block">{{categoryLabels[formCategoryIndex]}}</view>
+      </picker>
+    </view>
+
+    <view class="field">
+      <view class="field__label">保质期（可选）</view>
+      <view class="field__row">
+        <picker
+          class="field__grow"
+          mode="date"
+          value="{{formExpireDate}}"
+          bindchange="onExpireChange"
+        >
+          <view class="field__picker-value field__picker-value--block">
+            {{formExpireDate || '未设置'}}
+          </view>
+        </picker>
+        <view class="field__clear" wx:if="{{formExpireDate}}" catchtap="onClearExpire">清除</view>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="field__label">备注（可选）</view>
+      <input
+        class="field__input"
+        value="{{formRemark}}"
+        placeholder="例如：给奶奶留的"
+        maxlength="50"
+        bindinput="onRemarkInput"
+      />
+    </view>
+
+    <view class="form-error" wx:if="{{formError}}">{{formError}}</view>
+  </scroll-view>
+
+  <view class="sheet__footer">
+    <view class="wte-btn wte-btn--plain sheet__btn" bindtap="onCloseForm">取消</view>
+    <view
+      class="wte-btn wte-btn--plain sheet__btn sheet__btn--danger"
+      wx:if="{{formMode === 'edit'}}"
+      bindtap="onDeleteEditing"
+    >删除</view>
+    <view
+      class="wte-btn wte-btn--primary sheet__btn sheet__btn--main"
+      bindtap="onSubmit"
+    >{{saving ? '保存中...' : '保存'}}</view>
+  </view>
+</view>

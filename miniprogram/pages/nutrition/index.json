@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "营养估算",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "loading-state": "/components/loading-state/index",
+    "nutrition-card": "/components/nutrition-card/index"
+  }
+}

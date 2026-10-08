@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "今天吃什么",
+  "usingComponents": {
+    "t-switch": "tdesign-miniprogram/switch/switch"
+  }
+}

@@ -1,0 +1,74 @@
+<view class="page page--with-footer">
+  <view class="page-header">
+    <view class="page-header__title">今天吃什么</view>
+    <view class="page-header__subtitle">默认已读取家庭偏好，确认后即可生成菜单</view>
+  </view>
+
+  <view class="card">
+    <view class="field">
+      <view class="field__label">用餐人数</view>
+      <view class="chips">
+        <view
+          wx:for="{{peopleOptions}}"
+          wx:key="*this"
+          class="chip {{item === peopleCount ? 'chip--active' : ''}}"
+          data-value="{{item}}"
+          bindtap="onSelectPeople"
+        >{{item >= 5 ? '5+' : item}}</view>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="field__label">餐次</view>
+      <view class="chips">
+        <view
+          wx:for="{{mealTypeOptions}}"
+          wx:key="value"
+          class="chip {{item.value === mealType ? 'chip--active' : ''}}"
+          data-value="{{item.value}}"
+          bindtap="onSelectMealType"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="field__label">口味</view>
+      <view class="chips">
+        <view
+          wx:for="{{tasteOptions}}"
+          wx:key="label"
+          class="chip {{item.active ? 'chip--active' : ''}}"
+          data-index="{{index}}"
+          bindtap="onToggleTaste"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="field__label">最大烹饪时间</view>
+      <view class="chips">
+        <view
+          wx:for="{{cookTimeOptions}}"
+          wx:key="*this"
+          class="chip {{item === maxCookTime ? 'chip--active' : ''}}"
+          data-value="{{item}}"
+          bindtap="onSelectCookTime"
+        >{{item}} 分钟</view>
+      </view>
+    </view>
+
+    <view class="field field--row">
+      <view>
+        <view class="field__label">优先清空库存</view>
+        <view class="text-weak text-sm">尽量先用掉快过期或已有的食材</view>
+      </view>
+      <t-switch checked="{{clearInventoryFirst}}" bind:change="onToggleClearInventory" />
+    </view>
+  </view>
+
+  <view class="footer-bar">
+    <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onStartRecommend">
+      开始推荐
+    </view>
+  </view>
+</view>

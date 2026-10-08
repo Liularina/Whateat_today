@@ -1,0 +1,44 @@
+<wxs module="fmt">
+  var DIFFICULTY = { easy: '简单', medium: '中等', hard: '有点挑战' };
+  module.exports.difficulty = function (value) {
+    return DIFFICULTY[value] || '';
+  };
+  module.exports.kcal = function (value) {
+    if (!value) {
+      return '暂无数据';
+    }
+    return '约 ' + Math.round(value) + ' kcal';
+  };
+</wxs>
+
+<view class="recipe-card {{locked ? 'recipe-card--locked' : ''}}">
+  <view class="recipe-card__body" bindtap="onOpen">
+    <view class="recipe-card__head">
+      <view class="recipe-card__name">{{item.name}}</view>
+      <view class="recipe-card__lock" wx:if="{{locked}}">🔒 已锁定</view>
+    </view>
+
+    <view class="recipe-card__desc" wx:if="{{item.description}}">{{item.description}}</view>
+
+    <view class="recipe-card__meta">
+      <text wx:if="{{item.cookTime}}">约 {{item.cookTime}} 分钟</text>
+      <text wx:if="{{item.difficulty}}">· {{fmt.difficulty(item.difficulty)}}</text>
+      <text wx:if="{{item.nutrition}}">· {{fmt.kcal(item.nutrition.calories)}}/人</text>
+    </view>
+
+    <view class="recipe-card__reason" wx:if="{{item.matchReasons && item.matchReasons.length}}">
+      推荐理由：{{item.matchReasons[0]}}
+    </view>
+
+    <view class="recipe-card__missing" wx:if="{{item.missingIngredients && item.missingIngredients.length}}">
+      还缺：{{item.missingIngredients}}
+    </view>
+  </view>
+
+  <view class="recipe-card__actions">
+    <view class="recipe-card__action" catchtap="onReplace">换一换</view>
+    <view class="recipe-card__action {{locked ? 'recipe-card__action--active' : ''}}" catchtap="onToggleLock">
+      {{locked ? '取消锁定' : '锁定'}}
+    </view>
+  </view>
+</view>

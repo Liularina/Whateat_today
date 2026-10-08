@@ -1,0 +1,29 @@
+<view class="page page--with-footer">
+  <view class="page-header">
+    <view class="page-header__title">加入家庭</view>
+    <view class="page-header__subtitle">向家人要一个 6 位邀请码</view>
+  </view>
+
+  <view class="card">
+    <view class="field__label">输入家庭邀请码</view>
+    <input
+      class="code-input"
+      type="text"
+      maxlength="{{codeLength}}"
+      placeholder="例如 A8K29F"
+      placeholder-class="code-input__placeholder"
+      value="{{inviteCode}}"
+      bindinput="onCodeInput"
+    />
+    <view class="card__desc">邀请码由家庭管理员在「我的家庭」中查看和分享。</view>
+  </view>
+
+  <view class="form-error" wx:if="{{error}}">{{error}}</view>
+</view>
+
+<view class="footer-bar">
+  <view
+    class="wte-btn wte-btn--primary wte-btn--block {{submitting ? 'wte-btn--busy' : ''}}"
+    bindtap="onSubmit"
+  >{{submitting ? '加入中...' : '加入家庭'}}</view>
+</view>

@@ -1,0 +1,9 @@
+{
+  "name": "nutrition",
+  "version": "1.0.0",
+  "description": "今天吃什么 · nutrition 云函数（营养查询与计算）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

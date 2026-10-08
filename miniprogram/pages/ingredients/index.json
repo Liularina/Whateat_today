@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "我的食材",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "loading-state": "/components/loading-state/index",
+    "ingredient-item": "/components/ingredient-item/index"
+  }
+}

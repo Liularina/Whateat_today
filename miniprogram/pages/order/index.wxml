@@ -1,0 +1,16 @@
+<view class="page page--with-footer">
+  <view class="page-header">
+    <view class="page-header__title">家庭点菜</view>
+    <view class="page-header__subtitle">发起一次点菜，让家人一起决定今晚吃什么</view>
+  </view>
+
+  <empty-state
+    emoji="📣"
+    title="还没有进行中的点菜"
+    description="由家庭管理员发起后，家人就能收到分享并开始选择"
+  />
+
+  <view class="footer-bar">
+    <t-button theme="primary" size="large" block bind:tap="onCreateOrder">发起家庭点菜</t-button>
+  </view>
+</view>

@@ -1,0 +1,30 @@
+.field {
+  padding: 24rpx 0;
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.field:last-child {
+  border-bottom: none;
+}
+
+.field--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field__label {
+  font-size: 30rpx;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+
+.field--row .field__label {
+  margin-bottom: 4rpx;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}

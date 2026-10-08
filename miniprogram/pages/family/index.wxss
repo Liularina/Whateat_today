@@ -1,0 +1,154 @@
+.card__title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.card__desc {
+  margin: 12rpx 0 28rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.btn-gap {
+  margin-top: 20rpx;
+}
+
+/* ---------- 家庭概览 ---------- */
+.family-head {
+  display: flex;
+  flex-direction: column;
+}
+
+.family-head__name {
+  font-size: 44rpx;
+  font-weight: 700;
+}
+
+.family-head__count {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---------- 邀请码 ---------- */
+.invite-code {
+  margin: 20rpx 0;
+  font-size: 56rpx;
+  font-weight: 700;
+  letter-spacing: 10rpx;
+  color: var(--wte-brand);
+  text-align: center;
+}
+
+/* ---------- 成员列表 ---------- */
+.member {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.member:last-child {
+  border-bottom: none;
+}
+
+.member__avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.member__avatar-img {
+  width: 72rpx;
+  height: 72rpx;
+}
+
+.member__avatar--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f7f1ea;
+  font-size: 36rpx;
+}
+
+.member__info {
+  flex: 1;
+  min-width: 0;
+  margin-left: 20rpx;
+}
+
+.member__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.member__self {
+  font-size: 24rpx;
+  font-weight: 400;
+  color: var(--wte-text-weak);
+}
+
+.member__role {
+  flex-shrink: 0;
+  padding: 6rpx 18rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  background: #f4efe9;
+  color: var(--wte-text-weak);
+}
+
+.member__role--owner {
+  background: #fff1e9;
+  color: #d95f2f;
+  font-weight: 600;
+}
+
+.member__remove {
+  flex-shrink: 0;
+  margin-left: 20rpx;
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid var(--wte-line);
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.member__remove:active {
+  opacity: 0.7;
+}
+
+/* ---------- 默认设置 ---------- */
+.pref {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 2rpx solid var(--wte-line);
+  font-size: 28rpx;
+}
+
+.pref:last-child {
+  border-bottom: none;
+}
+
+.pref__label {
+  flex-shrink: 0;
+  color: var(--wte-text-weak);
+}
+
+.pref__value {
+  margin-left: 24rpx;
+  text-align: right;
+}
+
+/* ---------- 管理员提示 ---------- */
+.owner-tip {
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+  text-align: center;
+}

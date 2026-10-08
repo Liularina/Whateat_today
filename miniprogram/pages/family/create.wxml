@@ -1,0 +1,117 @@
+<view class="page page--with-footer">
+  <view class="page-header">
+    <view class="page-header__title">创建家庭</view>
+    <view class="page-header__subtitle">创建后你会成为管理员，可以邀请家人加入</view>
+  </view>
+
+  <view class="card">
+    <view class="field__label">家庭名称</view>
+    <input
+      class="field__input"
+      type="text"
+      maxlength="{{nameMaxLength}}"
+      placeholder="例如：我们家"
+      placeholder-class="field__placeholder"
+      value="{{name}}"
+      bindinput="onNameInput"
+    />
+  </view>
+
+  <view class="card">
+    <view class="field__label">默认人数</view>
+    <view class="chips">
+      <view
+        class="chip {{item.active ? 'chip--active' : ''}}"
+        wx:for="{{peopleOptions}}"
+        wx:key="value"
+        bindtap="onSelectPeople"
+        data-value="{{item.value}}"
+      >{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field__label">默认口味（可多选）</view>
+    <view class="chips">
+      <view
+        class="chip {{item.active ? 'chip--active' : ''}}"
+        wx:for="{{tasteOptions}}"
+        wx:key="label"
+        bindtap="onToggleTaste"
+        data-index="{{index}}"
+      >{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field__label">默认烹饪时间</view>
+    <view class="chips">
+      <view
+        class="chip {{item.active ? 'chip--active' : ''}}"
+        wx:for="{{cookTimeOptions}}"
+        wx:key="value"
+        bindtap="onSelectCookTime"
+        data-value="{{item.value}}"
+      >{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field__label">忌口（可多选、可自定义）</view>
+    <view class="chips">
+      <view
+        class="chip {{item.active ? 'chip--active' : ''}}"
+        wx:for="{{avoidOptions}}"
+        wx:key="label"
+        bindtap="onToggleAvoid"
+        data-index="{{index}}"
+      >{{item.label}}</view>
+    </view>
+    <view class="custom-row">
+      <input
+        class="custom-row__input"
+        type="text"
+        maxlength="{{tagMaxLength}}"
+        placeholder="自定义忌口，例如：不吃内脏"
+        placeholder-class="field__placeholder"
+        value="{{customAvoid}}"
+        bindinput="onCustomAvoidInput"
+      />
+      <view class="custom-row__btn" bindtap="onAddCustomAvoid">添加</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field__label">过敏（可多选、可自定义）</view>
+    <view class="chips">
+      <view
+        class="chip {{item.active ? 'chip--active' : ''}}"
+        wx:for="{{allergenOptions}}"
+        wx:key="label"
+        bindtap="onToggleAllergen"
+        data-index="{{index}}"
+      >{{item.label}}</view>
+    </view>
+    <view class="custom-row">
+      <input
+        class="custom-row__input"
+        type="text"
+        maxlength="{{tagMaxLength}}"
+        placeholder="自定义过敏原，例如：芒果"
+        placeholder-class="field__placeholder"
+        value="{{customAllergen}}"
+        bindinput="onCustomAllergenInput"
+      />
+      <view class="custom-row__btn" bindtap="onAddCustomAllergen">添加</view>
+    </view>
+  </view>
+
+  <view class="form-error" wx:if="{{error}}">{{error}}</view>
+</view>
+
+<view class="footer-bar">
+  <view
+    class="wte-btn wte-btn--primary wte-btn--block {{submitting ? 'wte-btn--busy' : ''}}"
+    bindtap="onSubmit"
+  >{{submitting ? '创建中...' : '创建家庭'}}</view>
+</view>

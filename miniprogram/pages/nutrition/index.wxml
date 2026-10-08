@@ -1,0 +1,112 @@
+<view class="page">
+  <view class="head">
+    <view>
+      <view class="page-header__title">营养估算</view>
+      <view class="page-header__subtitle" wx:if="{{hasIngredients}}">
+        按冰箱里 {{ingredientCount}} 种食材估算，实际以吃进去的量为准
+      </view>
+    </view>
+    <view class="head__add" wx:if="{{hasIngredients}}" bindtap="onGoIngredients">管理食材</view>
+  </view>
+
+  <!-- 登录初始化中 -->
+  <loading-state wx:if="{{!authReady}}" text="正在准备..." />
+
+  <block wx:elif="{{!isLoggedIn}}">
+    <empty-state emoji="🔐" title="还没有登录" description="登录后就能估算家里这顿饭的热量了" />
+  </block>
+
+  <!-- 「没有家庭」是正常状态：食材按家庭共享 -->
+  <block wx:elif="{{!hasFamily}}">
+    <empty-state
+      emoji="🏠"
+      title="你还没有家庭"
+      description="营养估算基于家庭食材库存，先创建或加入一个家庭吧"
+    />
+    <view class="actions">
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onGoCreateFamily">创建家庭</view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block actions__second" bindtap="onGoJoinFamily">加入家庭</view>
+    </view>
+  </block>
+
+  <loading-state wx:elif="{{loading}}" text="正在计算..." />
+
+  <!-- 计算失败且无结果：给明确提示与重试，不白屏 -->
+  <error-state
+    wx:elif="{{error && !hasIngredients}}"
+    title="营养计算失败"
+    description="{{error}}"
+    bind:retry="onRetry"
+  />
+
+  <block wx:elif="{{!hasIngredients}}">
+    <empty-state
+      emoji="🧺"
+      title="冰箱里还没有食材"
+      description="先去添加食材，营养估算才有数据可以算"
+      actionText="去添加食材"
+      bind:action="onGoIngredients"
+    />
+  </block>
+
+  <block wx:else>
+    <view class="error-tip" wx:if="{{error}}">{{error}}</view>
+
+    <!-- 人数：规范要求按人数给「人均」 -->
+    <view class="card people">
+      <view class="people__label">用餐人数</view>
+      <picker
+        class="people__picker"
+        mode="selector"
+        range="{{peopleLabels}}"
+        value="{{peopleIndex}}"
+        bindchange="onPeopleChange"
+      >
+        <view class="people__value">{{peopleLabels[peopleIndex]}} ▾</view>
+      </picker>
+      <view class="people__hint" wx:if="{{calculating}}">正在重算...</view>
+    </view>
+
+    <!-- 营养汇总：数值全部来自服务端重算 -->
+    <nutrition-card
+      class="nutrition-block"
+      total="{{total}}"
+      perPerson="{{perPerson}}"
+      title="这桌大概吃多少"
+    />
+
+    <!-- 部分数据缺失：规范指定文案，不补数字 -->
+    <view class="notice" wx:if="{{partial}}">
+      <view class="notice__text">{{partialMessage}}</view>
+      <view class="notice__detail" wx:if="{{missingText}}">缺少营养数据：{{missingText}}</view>
+      <view class="notice__detail" wx:if="{{unconvertibleText}}">
+        无法换算（缺少单个重量）：{{unconvertibleText}}
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card__title">逐项明细</view>
+      <view class="detail" wx:for="{{items}}" wx:key="key">
+        <view class="detail__main">
+          <view class="detail__name">{{item.name}}</view>
+          <view class="detail__sub">
+            {{item.amountLabel}}<block wx:if="{{item.gramsLabel}}"> · {{item.gramsLabel}}</block>
+          </view>
+        </view>
+        <view class="detail__right">
+          <view class="detail__kcal {{item.status !== 'ok' ? 'detail__kcal--muted' : ''}}">
+            {{item.kcalLabel}}
+          </view>
+          <view class="detail__status" wx:if="{{item.statusLabel}}">{{item.statusLabel}}</view>
+        </view>
+      </view>
+
+      <view class="detail__footer">已计入 {{computedCount}} / {{ingredientCount}} 种食材</view>
+    </view>
+
+    <view class="tips">
+      <view class="tips__line">· 热量与营养由系统按食材用量和每 100g 营养成分计算，不是精确测量值。</view>
+      <view class="tips__line">· 只做饮食参考，不构成任何医疗、减重或疾病营养建议。</view>
+    </view>
+  </block>
+</view>

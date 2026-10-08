@@ -1,0 +1,157 @@
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.head__add {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.actions {
+  margin-top: 40rpx;
+}
+
+.actions__second {
+  margin-top: 24rpx;
+}
+
+.error-tip {
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fdecee;
+  color: #c0392b;
+  font-size: 26rpx;
+}
+
+/* ---------------- 人数 ---------------- */
+
+.people {
+  display: flex;
+  align-items: center;
+  margin-top: 24rpx;
+}
+
+.people__label {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.people__value {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #f7f2ec;
+  font-size: 28rpx;
+}
+
+.people__hint {
+  margin-left: 16rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+/* nutrition-card 是自定义组件，不会命中 .card + .card，这里单独给间距 */
+.nutrition-block {
+  display: block;
+  margin-top: 24rpx;
+}
+
+/* ---------------- 缺失提示 ---------------- */
+
+.notice {
+  margin-top: 24rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  background: #fff7e6;
+  color: #a2660a;
+  font-size: 26rpx;
+}
+
+.notice__text {
+  font-weight: 600;
+}
+
+.notice__detail {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+}
+
+/* ---------------- 逐项明细 ---------------- */
+
+.card__title {
+  margin-bottom: 16rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.detail {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-top: 2rpx solid var(--wte-line);
+}
+
+.detail__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail__name {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.detail__sub {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.detail__right {
+  text-align: right;
+}
+
+.detail__kcal {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #d95f2f;
+}
+
+.detail__kcal--muted {
+  color: #b3a79b;
+  font-size: 26rpx;
+}
+
+.detail__status {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #b3a79b;
+}
+
+.detail__footer {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 2rpx solid var(--wte-line);
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---------------- 说明 ---------------- */
+
+.tips {
+  margin-top: 24rpx;
+  padding: 0 8rpx;
+}
+
+.tips__line {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--wte-text-weak);
+}

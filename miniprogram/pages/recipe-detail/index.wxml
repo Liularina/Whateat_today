@@ -1,0 +1,14 @@
+<view class="page page--with-footer">
+  <view class="card" wx:if="{{recipeId}}">
+    <view class="text-weak text-sm">菜谱 ID</view>
+    <view>{{recipeId}}</view>
+  </view>
+
+  <empty-state
+    emoji="👩‍🍳"
+    title="做法还没生成"
+    description="准备工作、食材、步骤、技巧与替代方案将在 Phase 12 接入"
+    actionText="重新生成"
+    bind:action="onRetry"
+  />
+</view>

@@ -1,0 +1,21 @@
+<view class="page">
+  <loading-state wx:if="{{loading}}" text="正在根据冰箱里的食材安排今晚菜单..." />
+
+  <error-state
+    wx:elif="{{errorMessage}}"
+    title="暂时没安排好今晚的菜单"
+    description="{{errorMessage}}"
+    retryText="重新推荐"
+    bind:retry="onRetry"
+  />
+
+  <block wx:else>
+    <empty-state
+      emoji="🍲"
+      title="还没有可展示的推荐结果"
+      description="推荐结果由推荐云函数生成，将在 Phase 7 接入"
+      actionText="返回调整条件"
+      bind:action="onBackToConditions"
+    />
+  </block>
+</view>

@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "菜单详情",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index"
+  }
+}

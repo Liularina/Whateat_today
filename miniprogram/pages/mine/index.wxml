@@ -1,0 +1,42 @@
+<view class="page">
+  <view class="profile">
+    <image class="profile__avatar" src="{{avatarUrl}}" wx:if="{{avatarUrl}}" mode="aspectFill" />
+    <view class="profile__avatar profile__avatar--placeholder" wx:else>🙂</view>
+    <view>
+      <view class="profile__name">{{nickname}}</view>
+      <view class="profile__family">用户状态：{{authStatus}}</view>
+      <view class="profile__warning" wx:if="{{authError}}">{{authError}}</view>
+    </view>
+  </view>
+
+  <!-- 当前家庭 -->
+  <view class="card">
+    <block wx:if="{{isInFamily}}">
+      <view class="card__title">当前家庭</view>
+      <view class="family-name">{{familyName}}</view>
+      <view class="card__desc">{{memberCount}} 位成员</view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onGoFamily">家庭管理</view>
+    </block>
+
+    <block wx:elif="{{familyReady}}">
+      <view class="card__title">暂无家庭</view>
+      <view class="card__desc">创建一个家庭，和家人一起决定今晚吃什么。</view>
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onGoCreateFamily">创建家庭</view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onGoJoinFamily">加入家庭</view>
+    </block>
+
+    <block wx:else>
+      <view class="card__desc">正在加载家庭信息…</view>
+    </block>
+  </view>
+
+  <view class="family-error" wx:if="{{familyError}}">{{familyError}}</view>
+
+  <view class="cells">
+    <t-cell-group theme="card">
+      <t-cell title="关于" description="{{appName}} V{{version}}（{{envName}}）" />
+    </t-cell-group>
+  </view>
+
+  <view class="tips">热量和营养数据为系统估算值，仅供饮食参考。</view>
+</view>

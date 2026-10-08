@@ -1,0 +1,8 @@
+<view class="empty-state">
+  <view class="empty-state__emoji">{{emoji}}</view>
+  <view class="empty-state__title">{{title}}</view>
+  <view class="empty-state__desc" wx:if="{{description}}">{{description}}</view>
+  <view class="empty-state__action" wx:if="{{actionText}}" hover-class="empty-state__action--hover" bindtap="onAction">
+    {{actionText}}
+  </view>
+</view>

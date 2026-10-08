@@ -1,0 +1,17 @@
+<view class="ingredient">
+  <view class="ingredient__main" bindtap="onEdit">
+    <view class="ingredient__name">
+      {{item.standardName}}
+      <text class="ingredient__alias" wx:if="{{item.name !== item.standardName}}">（{{item.name}}）</text>
+    </view>
+    <view class="ingredient__meta">
+      <text class="ingredient__tag" wx:if="{{categoryLabel}}">{{categoryLabel}}</text>
+      <text class="ingredient__expire" wx:if="{{item.expireDate}}">{{item.expireDate}} 到期</text>
+      <text class="ingredient__remark" wx:if="{{item.remark}}">{{item.remark}}</text>
+    </view>
+  </view>
+
+  <view class="ingredient__qty">{{item.quantity}} {{item.unit}}</view>
+
+  <view class="ingredient__delete" catchtap="onDelete">删除</view>
+</view>

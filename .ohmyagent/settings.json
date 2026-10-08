@@ -1,0 +1,24 @@
+{
+  "permission_rules": [
+    {
+      "tool": "Cmd(mkdir *)",
+      "decision": "allow"
+    },
+    {
+      "tool": "Grep",
+      "decision": "allow"
+    },
+    {
+      "tool": "Cmd(del *)",
+      "decision": "allow"
+    },
+    {
+      "tool": "Cmd(dir *)",
+      "decision": "allow"
+    },
+    {
+      "tool": "Cmd(cd *)",
+      "decision": "allow"
+    }
+  ]
+}

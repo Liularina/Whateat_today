@@ -1,0 +1,14 @@
+<view class="page">
+  <view class="card" wx:if="{{orderId}}">
+    <view class="text-weak text-sm">点菜 ID</view>
+    <view>{{orderId}}</view>
+  </view>
+
+  <empty-state
+    emoji="🍽️"
+    title="点菜详情还没加载"
+    description="成员选择、份数与备注将在 Phase 10 接入"
+    actionText="刷新"
+    bind:action="onRefresh"
+  />
+</view>

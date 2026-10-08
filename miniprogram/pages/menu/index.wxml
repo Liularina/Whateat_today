@@ -1,0 +1,32 @@
+<view class="page">
+  <view class="tabs">
+    <view
+      class="tabs__item {{activeTab === 'today' ? 'tabs__item--active' : ''}}"
+      data-tab="today"
+      bindtap="onSwitchTab"
+    >今日菜单</view>
+    <view
+      class="tabs__item {{activeTab === 'history' ? 'tabs__item--active' : ''}}"
+      data-tab="history"
+      bindtap="onSwitchTab"
+    >历史菜单</view>
+  </view>
+
+  <block wx:if="{{activeTab === 'today'}}">
+    <empty-state
+      emoji="📅"
+      title="今天还没有确认菜单"
+      description="去首页发起推荐，确认后就会出现在这里"
+      actionText="去首页看看"
+      bind:action="onGoHome"
+    />
+  </block>
+
+  <block wx:else>
+    <empty-state
+      emoji="🗂️"
+      title="还没有历史菜单"
+      description="确认过的菜单会保存在这里，方便随时回看做法"
+    />
+  </block>
+</view>

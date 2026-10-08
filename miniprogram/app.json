@@ -1,0 +1,68 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/ingredients/index",
+    "pages/nutrition/index",
+    "pages/recommend/index",
+    "pages/recommend-result/index",
+    "pages/order/index",
+    "pages/order-detail/index",
+    "pages/menu/index",
+    "pages/menu-detail/index",
+    "pages/recipe-detail/index",
+    "pages/family/index",
+    "pages/family/create",
+    "pages/family/join",
+    "pages/family/settings",
+    "pages/mine/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#fff7ef",
+    "navigationBarTitleText": "今天吃什么",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#fbf7f2"
+  },
+  "tabBar": {
+    "color": "#9a8c7d",
+    "selectedColor": "#ff7a45",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "assets/tabbar/home.png",
+        "selectedIconPath": "assets/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/ingredients/index",
+        "text": "食材",
+        "iconPath": "assets/tabbar/ingredients.png",
+        "selectedIconPath": "assets/tabbar/ingredients-active.png"
+      },
+      {
+        "pagePath": "pages/order/index",
+        "text": "点菜",
+        "iconPath": "assets/tabbar/order.png",
+        "selectedIconPath": "assets/tabbar/order-active.png"
+      },
+      {
+        "pagePath": "pages/menu/index",
+        "text": "菜单",
+        "iconPath": "assets/tabbar/menu.png",
+        "selectedIconPath": "assets/tabbar/menu-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "assets/tabbar/mine.png",
+        "selectedIconPath": "assets/tabbar/mine-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "usingComponents": {}
+}

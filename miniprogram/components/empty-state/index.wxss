@@ -1,0 +1,40 @@
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 96rpx 48rpx;
+  text-align: center;
+}
+
+.empty-state__emoji {
+  font-size: 88rpx;
+  opacity: 0.9;
+}
+
+.empty-state__title {
+  margin-top: 24rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.empty-state__desc {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+  line-height: 1.6;
+}
+
+.empty-state__action {
+  margin-top: 36rpx;
+  padding: 20rpx 56rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #ff9a6b, #ff7a45);
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.empty-state__action--hover {
+  opacity: 0.85;
+}

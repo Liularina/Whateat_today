@@ -1,0 +1,89 @@
+.profile {
+  display: flex;
+  align-items: center;
+  padding: 32rpx;
+  margin-bottom: 32rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.profile__avatar {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  margin-right: 24rpx;
+  background: #f7f1ea;
+}
+
+.profile__avatar--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48rpx;
+}
+
+.profile__name {
+  font-size: 34rpx;
+  font-weight: 600;
+}
+
+.profile__family {
+  margin-top: 6rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+/* 登录失败 / 网络异常提示 */
+.profile__warning {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: #d97706;
+}
+
+.tips {
+  margin-top: 32rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  text-align: center;
+}
+
+/* ---------- 当前家庭 ---------- */
+.card {
+  background: var(--wte-card);
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.card__title {
+  font-size: 28rpx;
+  color: var(--wte-text-weak);
+}
+
+.card__desc {
+  margin: 12rpx 0 28rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.family-name {
+  margin-top: 12rpx;
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.btn-gap {
+  margin-top: 20rpx;
+}
+
+.family-error {
+  margin-top: 20rpx;
+  font-size: 24rpx;
+  color: #d97706;
+}
+
+.cells {
+  margin-top: 32rpx;
+}
+

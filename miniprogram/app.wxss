@@ -1,0 +1,201 @@
+/**
+ * 全局样式
+ * 风格约束：家庭 / 温暖 / 干净 / 简单 / 有食欲（浅色背景、大卡片、圆角、少文字）
+ * 色彩令牌同时用于覆盖 TDesign 主题变量，保证自研组件与 TDesign 组件视觉一致。
+ */
+page {
+  /* ---- TDesign 主题覆盖（暖橙色系） ---- */
+  --td-brand-color: #ff7a45;
+  --td-brand-color-light: #fff1e9;
+  --td-brand-color-focus: #ffe0cf;
+  --td-brand-color-active: #d95f2f;
+  --td-success-color: #34b262;
+  --td-warning-color: #ffa940;
+  --td-error-color: #e34d59;
+  --td-text-color-primary: #2f2620;
+  --td-text-color-secondary: #7b6a5c;
+  --td-text-color-placeholder: #b3a79b;
+  --td-bg-color-page: #fbf7f2;
+  --td-bg-color-container: #ffffff;
+  --td-radius-default: 16rpx;
+  --td-radius-large: 24rpx;
+
+  /* ---- 自有令牌，供自研组件使用 ---- */
+  --wte-bg: #fbf7f2;
+  --wte-card: #ffffff;
+  --wte-brand: #ff7a45;
+  --wte-text: #2f2620;
+  --wte-text-weak: #7b6a5c;
+  --wte-line: #f0e7de;
+
+  background-color: var(--wte-bg);
+  color: var(--wte-text);
+  font-size: 28rpx;
+  line-height: 1.6;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Helvetica, sans-serif;
+}
+
+/* ---------- 布局 ---------- */
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.page--with-footer {
+  padding-bottom: 180rpx;
+}
+
+.section {
+  margin-top: 40rpx;
+}
+
+.section__title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+  margin-bottom: 20rpx;
+}
+
+/* ---------- 头部 ---------- */
+.page-header {
+  padding: 16rpx 0 8rpx;
+}
+
+.page-header__title {
+  font-size: 48rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.page-header__subtitle {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--wte-card);
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.card + .card {
+  margin-top: 24rpx;
+}
+
+.card--flat {
+  box-shadow: none;
+  border: 2rpx solid var(--wte-line);
+}
+
+/* ---------- 按钮 ---------- */
+.wte-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 96rpx;
+  border-radius: 999rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+}
+
+.wte-btn--primary {
+  background: linear-gradient(135deg, #ff9a6b, #ff7a45);
+  color: #ffffff;
+  box-shadow: 0 12rpx 28rpx rgba(255, 122, 69, 0.28);
+}
+
+.wte-btn--ghost {
+  background: #ffffff;
+  color: var(--wte-brand);
+  border: 2rpx solid var(--wte-brand);
+}
+
+.wte-btn--plain {
+  background: #fff1e9;
+  color: #d95f2f;
+}
+
+.wte-btn--block {
+  width: 100%;
+}
+
+.wte-btn:active,
+.wte-btn--hover {
+  opacity: 0.82;
+}
+
+.wte-btn[disabled] {
+  opacity: 0.45;
+}
+
+/* 首页等页面底部固定操作区 */
+.footer-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+  background: rgba(251, 247, 242, 0.96);
+  border-top: 2rpx solid var(--wte-line);
+  box-sizing: border-box;
+}
+
+/* ---------- 文本工具类 ---------- */
+.text-weak {
+  color: var(--wte-text-weak);
+}
+
+.text-brand {
+  color: var(--wte-brand);
+}
+
+.text-sm {
+  font-size: 24rpx;
+}
+
+.text-lg {
+  font-size: 36rpx;
+}
+
+.text-bold {
+  font-weight: 600;
+}
+
+/* ---------- 列表行 ---------- */
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+/* ---------- 标签 ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 10rpx 24rpx;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+}
+
+.chip--active {
+  background: var(--wte-brand);
+  color: #ffffff;
+}
+
+.chip--muted {
+  background: #f4efe9;
+  color: var(--wte-text-weak);
+}

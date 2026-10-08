@@ -1,0 +1,38 @@
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 96rpx 48rpx;
+  text-align: center;
+}
+
+.error-state__emoji {
+  font-size: 88rpx;
+}
+
+.error-state__title {
+  margin-top: 24rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.error-state__desc {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.error-state__retry {
+  margin-top: 36rpx;
+  padding: 20rpx 56rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid #ff7a45;
+  color: #d95f2f;
+  font-size: 30rpx;
+  font-weight: 600;
+  background: #ffffff;
+}
+
+.error-state__retry--hover {
+  background: #fff1e9;
+}

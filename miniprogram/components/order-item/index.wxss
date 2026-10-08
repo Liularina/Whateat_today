@@ -1,0 +1,60 @@
+.order-item {
+  background: #ffffff;
+  border-radius: 24rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.order-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-item__name {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.order-item__stepper {
+  display: flex;
+  align-items: center;
+}
+
+.order-item__step {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 34rpx;
+  line-height: 56rpx;
+  text-align: center;
+}
+
+.order-item__count {
+  min-width: 64rpx;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.order-item__desc {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.order-item__remark {
+  margin-top: 20rpx;
+  height: 76rpx;
+  padding: 0 24rpx;
+  border-radius: 16rpx;
+  background: #f7f1ea;
+  font-size: 26rpx;
+}
+
+.order-item__remark-placeholder {
+  color: #b3a79b;
+}

@@ -1,0 +1,104 @@
+<view class="page">
+  <view class="page-header">
+    <view class="page-header__title">我的家庭</view>
+    <view class="page-header__subtitle">家庭数据严格隔离，只有家庭成员可以查看</view>
+  </view>
+
+  <!-- 登录尚未结束：不展示失败态 -->
+  <view class="card" wx:if="{{!authReady}}">
+    <view class="card__desc">正在登录…</view>
+  </view>
+
+  <!-- 未登录：引导登录，不调用家庭接口 -->
+  <view class="card" wx:elif="{{!isLoggedIn}}">
+    <view class="card__title">请先登录</view>
+    <view class="card__desc">{{authError || '登录后即可创建或加入家庭'}}</view>
+    <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onRetryLogin">重新登录</view>
+  </view>
+
+  <!-- 已登录：家庭信息加载中 -->
+  <view class="card" wx:elif="{{!ready}}">
+    <view class="card__desc">正在加载家庭信息…</view>
+  </view>
+
+  <!-- 无家庭：正常业务状态，不是错误 -->
+  <block wx:elif="{{!isInFamily}}">
+    <view class="card" wx:if="{{error}}">
+      <view class="card__desc">{{error}}</view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="load">重新加载</view>
+    </view>
+
+    <view class="card">
+      <view class="card__title">暂无家庭</view>
+      <view class="card__desc">创建一个家庭，和家人一起决定今晚吃什么。</view>
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onGoCreate">创建家庭</view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onGoJoin">加入家庭</view>
+    </view>
+  </block>
+
+  <!-- 有家庭 -->
+  <block wx:else>
+    <view class="card" wx:if="{{error}}">
+      <view class="card__desc">{{error}}</view>
+    </view>
+
+    <view class="card">
+      <view class="family-head">
+        <view class="family-head__name">{{familyName}}</view>
+        <view class="family-head__count">{{memberCount}} 位成员</view>
+      </view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" wx:if="{{isOwner}}" bindtap="onGoSettings">家庭设置</view>
+    </view>
+
+    <view class="card">
+      <view class="card__title">家庭邀请码</view>
+      <view class="invite-code">{{inviteCode}}</view>
+      <view class="card__desc">把这个邀请码发给家人，他们就可以加入这个家庭。</view>
+      <view class="wte-btn wte-btn--plain wte-btn--block" bindtap="onCopyInviteCode">复制邀请码</view>
+    </view>
+
+    <view class="card">
+      <view class="card__title">家庭成员</view>
+
+      <view class="member" wx:for="{{members}}" wx:key="userId">
+        <view class="member__avatar" wx:if="{{item.avatarUrl}}">
+          <image class="member__avatar-img" src="{{item.avatarUrl}}" mode="aspectFill" />
+        </view>
+        <view class="member__avatar member__avatar--placeholder" wx:else>👤</view>
+
+        <view class="member__info">
+          <view class="member__name">{{item.nickname}}<text class="member__self" wx:if="{{item.isSelf}}">（我）</text></view>
+        </view>
+
+        <view class="member__role {{item.isOwnerRole ? 'member__role--owner' : ''}}">{{item.roleLabel}}</view>
+
+        <view
+          class="member__remove"
+          wx:if="{{isOwner && !item.isOwnerRole}}"
+          catchtap="onRemoveMember"
+          data-userid="{{item.userId}}"
+          data-name="{{item.nickname}}"
+        >移除</view>
+      </view>
+
+      <view class="card__desc" wx:if="{{members.length === 0}}">暂时没有成员</view>
+    </view>
+
+    <view class="card">
+      <view class="card__title">家庭默认设置</view>
+      <view class="pref"><text class="pref__label">默认人数</text><text class="pref__value">{{peopleText}}</text></view>
+      <view class="pref"><text class="pref__label">默认口味</text><text class="pref__value">{{tasteText}}</text></view>
+      <view class="pref"><text class="pref__label">烹饪时间</text><text class="pref__value">{{cookTimeText}}</text></view>
+      <view class="pref"><text class="pref__label">忌口</text><text class="pref__value">{{avoidText}}</text></view>
+      <view class="pref"><text class="pref__label">过敏</text><text class="pref__value">{{allergenText}}</text></view>
+    </view>
+
+    <view class="card card--flat">
+      <block wx:if="{{isOwner}}">
+        <view class="owner-tip">你是家庭管理员，请前往「家庭设置」解散家庭。</view>
+        <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onGoSettings">前往家庭设置</view>
+      </block>
+      <view wx:else class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onLeaveFamily">退出家庭</view>
+    </view>
+  </block>
+</view>

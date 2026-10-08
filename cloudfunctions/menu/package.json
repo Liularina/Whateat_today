@@ -1,0 +1,9 @@
+{
+  "name": "menu",
+  "version": "1.0.0",
+  "description": "今天吃什么 · menu 云函数（菜单查询）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

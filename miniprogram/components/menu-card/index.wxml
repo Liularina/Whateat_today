@@ -1,0 +1,18 @@
+<view class="menu-card" bindtap="onOpen" hover-class="menu-card--hover">
+  <view class="menu-card__head">
+    <view class="menu-card__title">{{mealLabel}}</view>
+    <view class="menu-card__date">{{menu.dateLabel}}</view>
+  </view>
+
+  <view class="menu-card__dishes">
+    <view class="menu-card__dish" wx:for="{{menu.items}}" wx:key="recipeId">{{item.name}}</view>
+  </view>
+
+  <view class="menu-card__foot">
+    <view class="menu-card__kcal">
+      <text wx:if="{{menu.perPersonNutrition}}">人均约 {{menu.perPersonNutrition.calories}} kcal</text>
+      <text wx:else>暂无营养数据</text>
+    </view>
+    <view class="menu-card__link">查看菜单 ›</view>
+  </view>
+</view>

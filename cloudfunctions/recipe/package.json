@@ -1,0 +1,9 @@
+{
+  "name": "recipe",
+  "version": "1.0.0",
+  "description": "今天吃什么 · recipe 云函数（AI 做法生成）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

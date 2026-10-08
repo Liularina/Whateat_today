@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="card" wx:if="{{menuId}}">
+    <view class="text-weak text-sm">菜单 ID</view>
+    <view>{{menuId}}</view>
+  </view>
+
+  <empty-state
+    emoji="🍱"
+    title="菜单详情还没加载"
+    description="菜品列表、总热量与人均热量将在 Phase 11 接入"
+  />
+</view>

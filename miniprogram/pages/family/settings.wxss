@@ -1,0 +1,120 @@
+.card__title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.card__desc {
+  margin: 12rpx 0 28rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---------- 只读提示 ---------- */
+.notice {
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fff7ef;
+  color: #d95f2f;
+  font-size: 26rpx;
+}
+
+/* ---------- 表单 ---------- */
+.field__label {
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 20rpx;
+}
+
+.field__input {
+  height: 88rpx;
+  padding: 0 24rpx;
+  border-radius: 16rpx;
+  background: #f7f1ea;
+  font-size: 30rpx;
+}
+
+.field__input--readonly {
+  color: var(--wte-text-weak);
+}
+
+.field__placeholder {
+  color: #b3a79b;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.chips .chip {
+  margin: 0 16rpx 16rpx 0;
+}
+
+.custom-row {
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+}
+
+.custom-row__input {
+  flex: 1;
+  min-width: 0;
+  height: 80rpx;
+  padding: 0 24rpx;
+  border-radius: 16rpx;
+  background: #f7f1ea;
+  font-size: 28rpx;
+}
+
+.custom-row__btn {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  padding: 0 32rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 16rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.custom-row__btn:active {
+  opacity: 0.8;
+}
+
+/* ---------- 危险操作 ---------- */
+.wte-btn--danger {
+  background: #ffffff;
+  color: var(--td-error-color);
+  border: 2rpx solid var(--td-error-color);
+}
+
+/* ---------- 错误 ---------- */
+.form-error {
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fdecee;
+  color: var(--td-error-color);
+  font-size: 26rpx;
+}
+
+/* ---------- 底部操作 ---------- */
+.footer-actions {
+  display: flex;
+  align-items: center;
+}
+
+.footer-actions__item {
+  flex: 1;
+}
+
+.footer-actions__item + .footer-actions__item {
+  margin-left: 20rpx;
+}
+
+.wte-btn--busy {
+  opacity: 0.6;
+}

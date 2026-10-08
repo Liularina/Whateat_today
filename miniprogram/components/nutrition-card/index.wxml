@@ -1,0 +1,43 @@
+<wxs module="fmt">
+  var DIFFICULTY = { easy: '简单', medium: '中等', hard: '有点挑战' };
+  module.exports.difficulty = function (value) {
+    return DIFFICULTY[value] || '';
+  };
+  module.exports.kcal = function (value) {
+    if (!value) {
+      return '暂无数据';
+    }
+    return '约 ' + Math.round(value) + ' kcal';
+  };
+</wxs>
+
+<view class="nutrition">
+  <view class="nutrition__title">{{title}}</view>
+
+  <view class="nutrition__grid" wx:if="{{perPerson}}">
+    <view class="nutrition__item">
+      <view class="nutrition__value">{{fmt.kcal(perPerson.calories)}}</view>
+      <view class="nutrition__label">人均热量</view>
+    </view>
+    <view class="nutrition__item">
+      <view class="nutrition__value">{{perPerson.protein}} g</view>
+      <view class="nutrition__label">蛋白质</view>
+    </view>
+    <view class="nutrition__item">
+      <view class="nutrition__value">{{perPerson.fat}} g</view>
+      <view class="nutrition__label">脂肪</view>
+    </view>
+    <view class="nutrition__item">
+      <view class="nutrition__value">{{perPerson.carbohydrate}} g</view>
+      <view class="nutrition__label">碳水</view>
+    </view>
+  </view>
+
+  <view class="nutrition__empty" wx:else>暂无营养数据</view>
+
+  <view class="nutrition__total" wx:if="{{total}}">
+    整桌合计 {{fmt.kcal(total.calories)}} · 蛋白质 {{total.protein}} g · 脂肪 {{total.fat}} g · 碳水 {{total.carbohydrate}} g
+  </view>
+
+  <view class="nutrition__disclaimer">{{disclaimer}}</view>
+</view>

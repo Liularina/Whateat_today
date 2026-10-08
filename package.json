@@ -1,0 +1,21 @@
+{
+  "name": "what-to-eat-today",
+  "version": "1.0.0",
+  "private": true,
+  "description": "今天吃什么 · 微信小程序",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "verify:family": "node tools/verify-family.js",
+    "verify:ingredient": "node tools/verify-ingredient.js",
+    "verify:nutrition": "node tools/verify-nutrition.js",
+    "e2e:nutrition": "node tools/e2e-nutrition.js"
+  },
+  "dependencies": {
+    "tdesign-miniprogram": "^1.17.0"
+  },
+  "devDependencies": {
+    "miniprogram-api-typings": "^5.2.3",
+    "miniprogram-automator": "^0.12.1",
+    "typescript": "^7.0.2"
+  }
+}

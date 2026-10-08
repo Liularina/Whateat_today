@@ -1,0 +1,23 @@
+<view class="order-item">
+  <view class="order-item__head">
+    <view class="order-item__name">{{item.name}}</view>
+    <view class="order-item__stepper">
+      <view class="order-item__step" catchtap="onDecrease">-</view>
+      <view class="order-item__count">{{quantity}}</view>
+      <view class="order-item__step" catchtap="onIncrease">+</view>
+    </view>
+  </view>
+
+  <view class="order-item__desc" wx:if="{{item.description}}">{{item.description}}</view>
+
+  <input
+    wx:if="{{canEdit}}"
+    class="order-item__remark"
+    type="text"
+    maxlength="30"
+    placeholder="备注，例如 少辣 / 不要葱"
+    placeholder-class="order-item__remark-placeholder"
+    value="{{item.remark}}"
+    bindinput="onRemarkInput"
+  />
+</view>
