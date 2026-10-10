@@ -100,4 +100,19 @@ Page({
   onGoJoinFamily() {
     wx.navigateTo({ url: '/pages/family/join' });
   },
+
+  /** Phase 7：模型 API 设置入口 */
+  onGoAiSettings() {
+    wx.navigateTo({ url: '/pages/ai-settings/index' });
+  },
+
+  /** Phase 11：历史菜单（菜单 Tab） */
+  onGoHistoryMenu() {
+    wx.switchTab({ url: '/pages/menu/index' });
+  },
+
+  /** Phase 11：历史点单（点菜 Tab） */
+  onGoHistoryOrder() {
+    wx.switchTab({ url: '/pages/order/index' });
+  },
 });

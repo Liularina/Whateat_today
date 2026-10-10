@@ -1,1 +1,181 @@
-/* 推荐结果页视觉层级：菜品图片 > 菜名 > 推荐理由 > 预计时间 > 人均热量 */
+/* 推荐结果页（Phase 8） */
+
+/* ---- 选择模式 ---- */
+
+.menus {
+  margin-top: 20rpx;
+}
+
+.menu-card {
+  background: var(--wte-card);
+  border-radius: 24rpx;
+  padding: 28rpx 32rpx;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.menu-card + .menu-card {
+  margin-top: 24rpx;
+}
+
+.menu-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.menu-card__title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.menu-card__time {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  flex: none;
+  margin-left: 16rpx;
+}
+
+.menu-card__reason {
+  margin-top: 12rpx;
+  padding: 14rpx 20rpx;
+  background: #fff7f0;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  color: #c07a52;
+  line-height: 1.5;
+}
+
+.menu-card__btn {
+  margin-top: 24rpx;
+}
+
+/* ---- 菜品卡片 ---- */
+
+.dish-list {
+  margin-top: 24rpx;
+}
+
+.dish-list--interactive {
+  margin-top: 0;
+}
+
+.dish-card {
+  padding: 24rpx;
+  background: #faf6f0;
+  border-radius: 16rpx;
+}
+
+.dish-card + .dish-card {
+  margin-top: 16rpx;
+}
+
+.dish-card--hover {
+  background: #fff3e8;
+}
+
+.dish-card--locked {
+  border: 2rpx solid #ff7a45;
+}
+
+.dish-card__top {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.dish-card__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.dish-card__lock-badge {
+  margin-left: 8rpx;
+}
+
+.dish-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  flex-wrap: wrap;
+}
+
+.dish-card__desc {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.dish-card__ingredients {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  line-height: 1.5;
+}
+
+.dish-card__tags {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: #c07a52;
+}
+
+/* ---- 操作按钮行 ---- */
+
+.dish-card__actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+/* ---- 确认横幅 ---- */
+
+.confirmed-banner {
+  padding: 20rpx 28rpx;
+  border-radius: 16rpx;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-size: 28rpx;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 8rpx;
+}
+
+/* ---- 底部按钮 ---- */
+
+.actions {
+  margin-top: 40rpx;
+}
+
+.btn-gap {
+  margin-top: 20rpx;
+}
+
+.tips {
+  margin-top: 28rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  line-height: 1.5;
+}
+
+/* ---- 小按钮 ---- */
+
+.wte-btn--sm {
+  padding: 12rpx 28rpx;
+  font-size: 24rpx;
+  border-radius: 40rpx;
+  height: auto;
+  min-height: 56rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wte-btn--primary-outline {
+  border: 2rpx solid #ff7a45;
+  color: #ff7a45;
+  background: transparent;
+}

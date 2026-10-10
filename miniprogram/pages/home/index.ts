@@ -102,6 +102,11 @@ Page({
     wx.switchTab({ url: '/pages/order/index' });
   },
 
+  /** Phase 6：家常菜谱库（公共只读，未登录也能看） */
+  onGoRecipes() {
+    wx.navigateTo({ url: '/pages/recipes/index' });
+  },
+
   /** 点击当前家庭卡片 → 家庭页 */
   onGoFamily() {
     wx.navigateTo({ url: '/pages/family/index' });

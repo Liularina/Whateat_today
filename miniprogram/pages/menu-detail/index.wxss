@@ -1,1 +1,66 @@
-/* 菜单详情：菜品列表 → 总热量 / 人均热量 → 蛋白质 / 脂肪 / 碳水 */
+/* 菜单详情（Phase 11） */
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 0 4rpx 24rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.meta-hint {
+  color: #c07a52;
+}
+
+.dish-list {
+  margin-top: 4rpx;
+}
+
+.dish-card {
+  padding: 26rpx;
+  background: #faf6f0;
+  border-radius: 16rpx;
+}
+
+.dish-card + .dish-card {
+  margin-top: 16rpx;
+}
+
+.dish-card--hover {
+  background: #fff3e8;
+}
+
+.dish-card__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.dish-card__lock {
+  margin-left: 8rpx;
+}
+
+.dish-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  flex-wrap: wrap;
+}
+
+.dish-card__desc {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  line-height: 1.5;
+}
+
+.dish-card__ing {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  line-height: 1.5;
+}

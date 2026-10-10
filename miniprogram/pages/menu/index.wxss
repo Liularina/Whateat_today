@@ -21,3 +21,123 @@
   font-weight: 600;
   box-shadow: 0 4rpx 16rpx rgba(180, 140, 105, 0.12);
 }
+
+/* 当前菜单 */
+
+.menu-head {
+  padding: 4rpx 8rpx 24rpx;
+}
+
+.menu-head__title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.menu-head__meta {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.dish-list {
+  margin-top: 4rpx;
+}
+
+.dish-card {
+  padding: 24rpx;
+  background: #faf6f0;
+  border-radius: 16rpx;
+}
+
+.dish-card + .dish-card {
+  margin-top: 16rpx;
+}
+
+.dish-card--hover {
+  background: #fff3e8;
+}
+
+.dish-card__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.dish-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.actions {
+  margin-top: 40rpx;
+}
+
+/* 历史菜单 */
+
+.history-list {
+  margin-top: 4rpx;
+}
+
+.history-card {
+  padding: 28rpx 32rpx;
+  background: var(--wte-card);
+  border-radius: 16rpx;
+}
+
+.history-card + .history-card {
+  margin-top: 16rpx;
+}
+
+.history-card--hover {
+  background: #fff3e8;
+}
+
+.history-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-card__title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.history-card__date {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  flex: none;
+  margin-left: 16rpx;
+}
+
+.history-card__dishes {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+  line-height: 1.5;
+}
+
+.history-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.load-more {
+  text-align: center;
+  padding: 28rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}

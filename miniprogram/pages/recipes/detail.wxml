@@ -1,0 +1,163 @@
+<!-- 1. 加载中 -->
+<loading-state wx:if="{{loading}}" text="正在加载菜谱..." />
+
+<block wx:elif="{{notFound}}">
+  <view class="page">
+    <view class="page-header">
+      <view class="page-header__title">{{fallbackName || '菜谱不可用'}}</view>
+      <view class="page-header__subtitle" wx:if="{{fallbackName}}">来自历史记录</view>
+    </view>
+    <view class="unavailable-banner">
+      该菜谱可能已下架或删除，无法查看当前内容。历史记录中保存的菜名仅供参考。
+    </view>
+    <empty-state emoji="🍽️" title="当前菜谱不可用" description="可以返回历史菜单或点单列表继续查看其他菜品" actionText="返回" bind:action="onBackToList" />
+  </view>
+</block>
+
+<block wx:elif="{{error}}">
+  <error-state title="菜谱加载失败" description="{{error}}" bind:retry="onRetry" />
+</block>
+
+<view class="page" wx:else>
+  <view class="page-header">
+    <view class="page-header__title">{{name}}</view>
+    <view class="page-header__subtitle" wx:if="{{description}}">{{description}}</view>
+  </view>
+
+  <view class="meta-card">
+    <view class="meta-card__row">
+      <view class="meta-item">
+        <view class="meta-item__label">难度</view>
+        <view class="meta-item__value">{{difficultyLabel}}</view>
+      </view>
+      <view class="meta-item">
+        <view class="meta-item__label">预计用时</view>
+        <view class="meta-item__value">约 {{cookTime}} 分钟</view>
+      </view>
+      <view class="meta-item">
+        <view class="meta-item__label">适用人数</view>
+        <view class="meta-item__value">{{servings}} 人份</view>
+      </view>
+    </view>
+    <view class="meta-card__tags">
+      <view class="chip chip--muted" wx:if="{{category}}">{{category}}</view>
+      <view class="chip" wx:for="{{tags}}" wx:key="*this">{{item}}</view>
+    </view>
+  </view>
+
+  <!-- 原始食材 -->
+  <view class="section">
+    <view class="section__title">食材清单</view>
+    <view class="card">
+      <view class="ing-row" wx:for="{{ingredients}}" wx:key="name">
+        <view class="ing-row__name">{{item.name}}</view>
+        <view class="ing-row__amount">{{item.amountText}}</view>
+      </view>
+      <empty-state wx:if="{{ingredients.length === 0}}" emoji="🧺" title="暂无食材信息" />
+    </view>
+  </view>
+
+  <!-- 原始步骤 -->
+  <view class="section">
+    <view class="section__title">烹饪步骤</view>
+    <view class="card">
+      <view class="step" wx:for="{{steps}}" wx:key="step">
+        <view class="step__index">{{item.step}}</view>
+        <view class="step__body">
+          <view class="step__desc">{{item.description}}</view>
+          <view class="step__time" wx:if="{{item.timeText}}">{{item.timeText}}</view>
+        </view>
+      </view>
+      <empty-state wx:if="{{steps.length === 0}}" emoji="📝" title="暂无步骤信息" />
+    </view>
+  </view>
+
+  <!-- Phase 10：AI 生成入口 -->
+  <view class="section">
+    <view class="section__title">AI 详细做法</view>
+
+    <!-- 未配置 API -->
+    <view class="card" wx:if="{{!aiConfigured && !generatedData && !generating}}">
+      <empty-state emoji="🤖" title="配置模型 API 生成详细做法" description="使用你自己的 API 为每道菜生成详细的烹饪步骤" actionText="去配置" bind:action="onGoSettings" />
+    </view>
+
+    <!-- 生成按钮 -->
+    <view class="card" wx:if="{{aiConfigured && !generatedData && !generating}}">
+      <view class="wte-btn wte-btn--primary-outline wte-btn--block" bindtap="onGenerateSteps">
+        生成详细做法
+      </view>
+    </view>
+
+    <!-- 生成中 -->
+    <view class="card" wx:if="{{generating}}">
+      <loading-state text="AI 正在生成详细做法..." />
+    </view>
+
+    <!-- 生成失败 -->
+    <view class="card" wx:if="{{generateError}}">
+      <error-state title="生成失败" description="{{generateError}}" retryText="重试" bind:retry="onRegenerateSteps" />
+    </view>
+
+    <!-- 生成结果 -->
+    <block wx:if="{{generatedData}}">
+      <!-- 简介 -->
+      <view class="card" wx:if="{{generatedIntro}}">
+        <view class="intro-text">{{generatedIntro}}</view>
+      </view>
+
+      <!-- 生成食材 -->
+      <view class="section" wx:if="{{generatedIngredients.length > 0}}">
+        <view class="section__title">食材准备</view>
+        <view class="card">
+          <view class="ing-row" wx:for="{{generatedIngredients}}" wx:key="name">
+            <view class="ing-row__name">{{item.name}}</view>
+            <view class="ing-row__amount">{{item.amountText}}</view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 准备工作 -->
+      <view class="section" wx:if="{{generatedPrep.length > 0}}">
+        <view class="section__title">准备工作</view>
+        <view class="card">
+          <view class="prep-item" wx:for="{{generatedPrep}}" wx:key="*this">{{item}}</view>
+        </view>
+      </view>
+
+      <!-- 生成步骤 -->
+      <view class="section" wx:if="{{generatedSteps.length > 0}}">
+        <view class="section__title">详细步骤</view>
+        <view class="card">
+          <view class="step" wx:for="{{generatedSteps}}" wx:key="step">
+            <view class="step__index">{{item.step}}</view>
+            <view class="step__body">
+              <view class="step__desc">{{item.description}}</view>
+              <view class="step__time" wx:if="{{item.timeText}}">{{item.timeText}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 提示 -->
+      <view class="section" wx:if="{{generatedTips.length > 0}}">
+        <view class="section__title">小贴士</view>
+        <view class="card">
+          <view class="tip-item" wx:for="{{generatedTips}}" wx:key="*this">💡 {{item}}</view>
+        </view>
+      </view>
+
+      <!-- 安全提示 -->
+      <view class="section" wx:if="{{generatedSafety.length > 0}}">
+        <view class="section__title">安全提示</view>
+        <view class="card">
+          <view class="tip-item" wx:for="{{generatedSafety}}" wx:key="*this">⚠️ {{item}}</view>
+        </view>
+      </view>
+
+      <!-- 重新生成 -->
+      <view class="actions" wx:if="{{aiConfigured}}">
+        <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onRegenerateSteps">重新生成</view>
+      </view>
+    </block>
+  </view>
+</view>

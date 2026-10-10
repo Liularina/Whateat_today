@@ -1,14 +1,138 @@
 <view class="page">
-  <view class="card" wx:if="{{orderId}}">
-    <view class="text-weak text-sm">点菜 ID</view>
-    <view>{{orderId}}</view>
-  </view>
+  <loading-state wx:if="{{loading}}" text="加载中..." />
 
-  <empty-state
-    emoji="🍽️"
-    title="点菜详情还没加载"
-    description="成员选择、份数与备注将在 Phase 10 接入"
-    actionText="刷新"
-    bind:action="onRefresh"
+  <error-state
+    wx:elif="{{error}}"
+    title="加载失败"
+    description="{{error}}"
+    retryText="重试"
+    bind:retry="loadDetail"
   />
+
+  <block wx:else>
+    <!-- 头部 -->
+    <view class="page-header">
+      <view class="page-header__title">{{title}}</view>
+      <view class="page-header__subtitle">
+        {{status === 'open' ? '进行中' : '已关闭'}}
+        <text wx:if="{{deadline}}"> · 截止 {{deadline}}</text>
+      </view>
+      <view class="page-header__subtitle" wx:if="{{closedAt}}">关闭时间：{{closedAt}}</view>
+      <view class="page-header__note" wx:if="{{note}}">{{note}}</view>
+    </view>
+
+    <!-- 已关闭横幅 -->
+    <view class="closed-banner" wx:if="{{closed}}">本点单已关闭，不可再修改（历史记录只读）</view>
+
+    <!-- 菜品列表 -->
+    <view class="dish-list">
+      <view
+        class="dish-card {{item.selected ? 'dish-card--selected' : ''}}"
+        wx:for="{{recipes}}"
+        wx:key="recipeId"
+      >
+        <view class="dish-card__top">
+          <view
+            class="dish-card__name dish-card__name--link"
+            data-recipe-id="{{item.recipeId}}"
+            data-name="{{item.name}}"
+            catchtap="onOpenRecipe"
+          >{{item.name}} <text class="dish-card__link-hint">做法 ›</text></view>
+          <view class="dish-card__meta">
+            <view class="chip chip--muted">{{item.category}}</view>
+            <text wx:if="{{item.cookTime}}">{{item.cookTime}}</text>
+          </view>
+          <view class="dish-card__desc" wx:if="{{item.description}}">{{item.description}}</view>
+        </view>
+
+        <!-- 选择控件 -->
+        <view class="dish-card__controls" wx:if="{{editable && !closed}}">
+          <view class="dish-card__toggle" data-recipe-id="{{item.recipeId}}" bindtap="onToggleSelect">
+            <view class="checkbox {{item.selected ? 'checkbox--checked' : ''}}">{{item.selected ? '✓' : ''}}</view>
+            <text>{{item.selected ? '已选' : '选择'}}</text>
+          </view>
+
+          <block wx:if="{{item.selected}}">
+            <view class="dish-card__qty">
+              <text class="dish-card__qty-label">份数</text>
+              <input
+                class="qty-input"
+                type="number"
+                value="{{item.quantity}}"
+                data-recipe-id="{{item.recipeId}}"
+                bindinput="onQuantityChange"
+              />
+            </view>
+            <input
+              class="note-input"
+              value="{{item.note}}"
+              placeholder="备注（选填）"
+              maxlength="100"
+              data-recipe-id="{{item.recipeId}}"
+              bindinput="onNoteInput"
+            />
+          </block>
+        </view>
+
+        <!-- 只读：已选择的状态 -->
+        <view class="dish-card__selected-info" wx:elif="{{item.selected}}">
+          <view class="chip chip--active">已选 {{item.quantity}} 份</view>
+          <text wx:if="{{item.note}}" class="dish-card__note">备注：{{item.note}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部操作 -->
+    <view class="actions" wx:if="{{editable && !closed}}">
+      <view class="wte-btn wte-btn--primary wte-btn--block" wx:if="{{!saving}}" bindtap="onSubmit">
+        保存点单
+      </view>
+      <view class="wte-btn wte-btn--primary wte-btn--block wte-btn--loading" wx:else>
+        保存中...
+      </view>
+    </view>
+
+    <!-- 管理员操作 -->
+    <view class="actions" wx:if="{{canManage}}">
+      <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onViewSummary">
+        查看汇总
+      </view>
+      <view
+        class="wte-btn wte-btn--danger wte-btn--block btn-gap"
+        wx:if="{{!closed}}"
+        bindtap="onCloseOrder"
+      >{{closing ? '关闭中...' : '关闭点单'}}</view>
+    </view>
+  </block>
+</view>
+
+<!-- 汇总弹窗 -->
+<view class="overlay" wx:if="{{showSummary && summary}}" catchtap="onCloseSummary">
+  <view class="overlay__card" catchtap>
+    <view class="overlay__title">点单汇总</view>
+    <view class="overlay__desc">{{summary.totalParticipants}} 人参与 · {{summary.totalDishes}} 道菜</view>
+
+    <view class="summary-section">
+      <view class="summary-section__title">按菜品</view>
+      <view class="summary-row" wx:for="{{summary.dishSummary}}" wx:key="recipeId">
+        <view class="summary-row__name">{{item.name}}</view>
+        <view class="summary-row__stats">{{item.peopleCount}} 人选 · {{item.totalQuantity}} 份</view>
+      </view>
+    </view>
+
+    <view class="summary-section" wx:if="{{summary.memberSummary.length > 0}}">
+      <view class="summary-section__title">按成员</view>
+      <view class="summary-member" wx:for="{{summary.memberSummary}}" wx:key="userId">
+        <view class="summary-member__name">{{item.displayName || item.userId}}</view>
+        <view class="summary-member__item" wx:for="{{item.items}}" wx:for-item="mi" wx:key="recipeId">
+          {{mi.name}} ×{{mi.quantity}}
+          <text wx:if="{{mi.note}}">（{{mi.note}}）</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="overlay__actions">
+      <view class="wte-btn wte-btn--ghost" bindtap="onCloseSummary" style="flex:1">关闭</view>
+    </view>
+  </view>
 </view>

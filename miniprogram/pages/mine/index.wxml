@@ -34,6 +34,14 @@
 
   <view class="cells">
     <t-cell-group theme="card">
+      <t-cell title="历史菜单" description="回看过去确认过的菜单与做法" arrow bind:click="onGoHistoryMenu" />
+      <t-cell title="历史点单" description="查看进行中与已关闭的家庭点单" arrow bind:click="onGoHistoryOrder" />
+    </t-cell-group>
+  </view>
+
+  <view class="cells">
+    <t-cell-group theme="card">
+      <t-cell title="模型 API 设置" arrow bind:click="onGoAiSettings" />
       <t-cell title="关于" description="{{appName}} V{{version}}（{{envName}}）" />
     </t-cell-group>
   </view>

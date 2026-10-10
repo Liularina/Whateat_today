@@ -20,6 +20,10 @@ declare global {
     /** 家庭加载错误文案，无错误时为空串 */
     familyError: string;
     cloudReady: boolean;
+    /** Phase 7：最后一次 AI 推荐结果（跨页面传递，不持久化） */
+    lastRecommendResult: unknown;
+    /** Phase 8：当前正在操作的菜单 ID */
+    currentMenuId: string;
   }
 
   interface IAppOption {

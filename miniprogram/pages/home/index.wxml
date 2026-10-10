@@ -69,6 +69,10 @@
       <view class="quick-actions__emoji">📣</view>
       <view class="quick-actions__label">家庭点菜</view>
     </view>
+    <view class="quick-actions__item" bindtap="onGoRecipes" hover-class="quick-actions__item--hover">
+      <view class="quick-actions__emoji">📖</view>
+      <view class="quick-actions__label">家常菜谱</view>
+    </view>
     <view class="quick-actions__item" bindtap="onGoFamily" hover-class="quick-actions__item--hover">
       <view class="quick-actions__emoji">👨‍👩‍👧</view>
       <view class="quick-actions__label">我的家庭</view>

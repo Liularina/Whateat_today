@@ -28,3 +28,34 @@
   flex-wrap: wrap;
   gap: 16rpx;
 }
+
+/* Phase 7 新增 */
+
+.config-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 28rpx;
+  background: #fff3e8;
+  border-radius: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.config-banner__text {
+  font-size: 26rpx;
+  color: #d95f2f;
+  flex: 1;
+}
+
+.config-banner__btn {
+  flex: none;
+  margin-left: 20rpx;
+  font-size: 24rpx;
+}
+
+.settings-link {
+  text-align: right;
+  padding: 12rpx 0 8rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}

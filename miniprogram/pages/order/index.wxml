@@ -1,16 +1,83 @@
 <view class="page page--with-footer">
   <view class="page-header">
     <view class="page-header__title">家庭点菜</view>
-    <view class="page-header__subtitle">发起一次点菜，让家人一起决定今晚吃什么</view>
+    <view class="page-header__subtitle">看看家里正在点单和已经结束的点单</view>
+  </view>
+
+  <view class="filter-bar" wx:if="{{hasFamily}}">
+    <view
+      class="filter-item {{statusFilter === 'all' ? 'filter-item--active' : ''}}"
+      data-filter="all"
+      bindtap="onSwitchFilter"
+    >全部</view>
+    <view
+      class="filter-item {{statusFilter === 'open' ? 'filter-item--active' : ''}}"
+      data-filter="open"
+      bindtap="onSwitchFilter"
+    >进行中</view>
+    <view
+      class="filter-item {{statusFilter === 'closed' ? 'filter-item--active' : ''}}"
+      data-filter="closed"
+      bindtap="onSwitchFilter"
+    >已关闭</view>
   </view>
 
   <empty-state
-    emoji="📣"
-    title="还没有进行中的点菜"
-    description="由家庭管理员发起后，家人就能收到分享并开始选择"
+    wx:if="{{!hasFamily}}"
+    emoji="👨‍👩‍👧"
+    title="还没有加入家庭"
+    description="点单需要先创建一个家庭或加入已有家庭"
   />
 
+  <block wx:elif="{{loading}}">
+    <loading-state text="加载中..." />
+  </block>
+
+  <block wx:elif="{{error && orders.length === 0}}">
+    <error-state title="加载失败" description="{{error}}" retryText="重试" bind:retry="loadOrders" />
+  </block>
+
+  <block wx:elif="{{orders.length === 0}}">
+    <empty-state
+      emoji="📋"
+      title="还没有点单记录"
+      description="从推荐页确认菜单后发起一次家庭点单"
+    />
+  </block>
+
+  <view class="order-list" wx:else>
+    <view
+      class="order-card"
+      wx:for="{{orders}}"
+      wx:key="orderId"
+      data-id="{{item.orderId}}"
+      bindtap="onOpenOrder"
+      hover-class="order-card--hover"
+    >
+      <view class="order-card__header">
+        <view class="order-card__title">{{item.title}}</view>
+        <view class="order-card__status {{item.status === 'open' ? 'order-card__status--open' : ''}}">
+          {{item.status === 'open' ? '进行中' : '已关闭'}}
+        </view>
+      </view>
+      <view class="order-card__meta">
+        <text>菜单：{{item.menuName || '未关联'}}</text>
+        <text wx:if="{{item.initiatorName}}">发起人：{{item.initiatorName}}</text>
+      </view>
+      <view class="order-card__footer">
+        <text wx:if="{{item.deadline}}">截止 {{item.deadline}}</text>
+        <text wx:elif="{{item.closedAt}}">关闭于 {{item.closedAt}}</text>
+        <text wx:else>不限时</text>
+        <text wx:if="{{item.memberCount > 0}}">{{item.memberCount}} 人参与</text>
+      </view>
+    </view>
+
+    <view class="load-more" wx:if="{{loading && orders.length > 0}}">加载中...</view>
+  </view>
+
   <view class="footer-bar">
-    <t-button theme="primary" size="large" block bind:tap="onCreateOrder">发起家庭点菜</t-button>
+    <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onCreateOrder">
+      发起家庭点单
+    </view>
   </view>
 </view>

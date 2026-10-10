@@ -1,112 +1,159 @@
 /**
- * 家庭点菜相关类型
+ * 家庭点单相关类型（Phase 9）
  *
- * 注意：FamilyOrder 表示「家庭成员选择今晚吃什么」的过程，
- * 与 Menu（最终确认菜单）是两个不同的数据实体，禁止合并。
+ * family_orders —— 每轮点单
+ * family_order_items —— 每个成员在本轮的选择
  */
-import type { NutritionSummary } from './menu';
+import type { RecipeIngredient } from './recipe';
 
-/** 点菜状态机，只允许按顺序流转 */
-export type OrderStatus =
-  | 'draft'
-  | 'open'
-  | 'closed'
-  | 'confirmed'
-  | 'recipe_generated'
-  | 'completed'
-  | 'cancelled';
+/* ============================== 状态枚举 ============================== */
 
-/** family_orders 集合文档 */
+export type OrderStatus = 'open' | 'closed';
+
+/* ============================== 数据集合 ============================== */
+
+/** family_orders 文档 */
 export interface FamilyOrder {
   _id: string;
   familyId: string;
-  /** 确认后关联的菜单 ID，确认前为 null */
-  menuId: string | null;
+  menuId: string;
+  menuName: string;
   title: string;
   status: OrderStatus;
-  /** 截止时间，ISO 字符串；判断以服务端为准 */
   deadline: string;
-  /** 候选菜品对应的菜谱 ID */
+  note: string;
+  initiatorUserId: string;
   recipeIds: string[];
-  createdBy: string;
   createdAt: string;
   updatedAt: string;
+  closedAt?: string;
+  finalSummary?: DishSummaryItem[];
+  totalParticipants?: number;
 }
 
-/** family_order_items 集合文档：某个成员对某道菜的选择 */
-export interface FamilyOrderItem {
+/** family_order_items 文档（每个用户每个点单一条） */
+export interface FamilyOrderItemDoc {
   _id: string;
   orderId: string;
+  familyId: string;
   userId: string;
-  recipeId: string;
-  quantity: number;
-  remark: string;
+  items: OrderItemSelection[];
   createdAt: string;
   updatedAt: string;
 }
 
-/** 候选菜品展示信息 */
-export interface OrderRecipeOption {
+/* ============================== 选择与汇总 ============================== */
+
+/** 用户对一道菜的选择 */
+export interface OrderItemSelection {
+  recipeId: string;
+  quantity: number;
+  note: string;
+}
+
+/** 点单中的菜品展示 */
+export interface OrderRecipe {
   recipeId: string;
   name: string;
   description: string;
+  category: string;
+  tags: string[];
+  cookTime: number;
+  ingredients: RecipeIngredient[];
 }
 
-/** 创建点菜入参 */
-export interface CreateOrderInput {
-  title: string;
-  /** 截止时间，ISO 字符串 */
-  deadline: string;
-  recipeIds: string[];
-  remark?: string;
-}
-
-/** 成员提交单道菜的选择 */
-export interface SubmitOrderItemInput {
-  orderId: string;
-  recipeId: string;
-  quantity: number;
-  remark?: string;
-}
-
-/** 成员当前选择的汇总视图 */
-export interface OrderMySelection {
-  recipeId: string;
-  quantity: number;
-  remark: string;
-}
-
-/** 点菜详情：订单 + 候选菜 + 我的选择 */
+/** getOrder 返回 */
 export interface OrderDetail {
   order: FamilyOrder;
-  recipes: OrderRecipeOption[];
-  mySelections: OrderMySelection[];
-  /** 当前用户是否为管理员 */
+  recipes: OrderRecipe[];
+  mySelections: OrderItemSelection[];
   canManage: boolean;
-  /** 服务端判定的当前是否可提交 */
   editable: boolean;
 }
 
-/** 管理员汇总中的单道菜统计 */
-export interface OrderSummaryItem {
+/* ============================== 汇总 ============================== */
+
+/** 按菜品汇总项 */
+export interface DishSummaryItem {
   recipeId: string;
   name: string;
-  /** 选择该菜的人数 */
+  category: string;
   peopleCount: number;
-  /** 份数合计 */
   totalQuantity: number;
-  /** 选择该菜的成员昵称，仅管理员可见 */
-  memberNames: string[];
 }
 
-/** 管理员汇总结果 */
+/** 按成员汇总项 */
+export interface MemberSummaryItem {
+  userId: string;
+  displayName: string;
+  items: {
+    recipeId: string;
+    name: string;
+    quantity: number;
+    note: string;
+  }[];
+}
+
+/** getOrderSummary 返回 */
 export interface OrderSummary {
   orderId: string;
   title: string;
   status: OrderStatus;
+  deadline: string;
   totalParticipants: number;
   totalDishes: number;
-  totalNutrition: NutritionSummary;
-  perPersonNutrition: NutritionSummary;
-  items: OrderSummaryItem[];
+  dishSummary: DishSummaryItem[];
+  memberSummary: MemberSummaryItem[];
+  unsubmittedCount: number;
+}
+
+/* ============================== 入参 ============================== */
+
+export interface CreateOrderInput {
+  menuId: string;
+  note?: string;
+  deadline?: string;
+}
+
+export interface SubmitOrderItemsInput {
+  orderId: string;
+  items: OrderItemSelection[];
+}
+
+export interface CloseOrderResult {
+  _id: string;
+  status: string;
+  closedAt: string;
+  totalParticipants: number;
+  dishSummary: DishSummaryItem[];
+}
+
+/* ============================== 列表 ============================== */
+
+export interface OrderListParams {
+  familyId: string;
+  page?: number;
+  pageSize?: number;
+  status?: OrderStatus;
+}
+
+export interface OrderListItem {
+  orderId: string;
+  menuId: string;
+  menuName: string;
+  title: string;
+  status: OrderStatus;
+  initiatorUserId: string;
+  initiatorName: string;
+  createdAt: string;
+  deadline: string;
+  closedAt: string;
+  memberCount: number;
+}
+
+export interface OrderListResult {
+  items: OrderListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

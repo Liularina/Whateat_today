@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "家常菜谱",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "loading-state": "/components/loading-state/index"
+  }
+}

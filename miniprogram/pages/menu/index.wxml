@@ -4,7 +4,7 @@
       class="tabs__item {{activeTab === 'today' ? 'tabs__item--active' : ''}}"
       data-tab="today"
       bindtap="onSwitchTab"
-    >今日菜单</view>
+    >当前菜单</view>
     <view
       class="tabs__item {{activeTab === 'history' ? 'tabs__item--active' : ''}}"
       data-tab="history"
@@ -12,21 +12,113 @@
     >历史菜单</view>
   </view>
 
-  <block wx:if="{{activeTab === 'today'}}">
+  <!-- 无家庭 -->
+  <empty-state
+    wx:if="{{!hasFamily}}"
+    emoji="👨‍👩‍👧"
+    title="还没有加入家庭"
+    description="菜单是家庭共享的，先创建或加入一个家庭吧"
+  />
+
+  <!-- ============================== 当前菜单 ============================== -->
+  <block wx:elif="{{activeTab === 'today'}}">
+    <loading-state wx:if="{{todayLoading}}" text="加载中..." />
+
+    <error-state
+      wx:elif="{{todayError}}"
+      title="加载失败"
+      description="{{todayError}}"
+      retryText="重试"
+      bind:retry="loadToday"
+    />
+
     <empty-state
+      wx:elif="{{!todayMenu}}"
       emoji="📅"
-      title="今天还没有确认菜单"
+      title="还没有已确认的菜单"
       description="去首页发起推荐，确认后就会出现在这里"
       actionText="去首页看看"
       bind:action="onGoHome"
     />
+
+    <block wx:else>
+      <view class="menu-head">
+        <view class="menu-head__title">{{todayMenu.mealTypeLabel}} · {{todayMenu.servings}} 人份</view>
+        <view class="menu-head__meta">
+          <view class="chip chip--muted">{{todayMenu.statusLabel}}</view>
+          <text wx:if="{{todayMenu.dateLabel}}">{{todayMenu.dateLabel}}</text>
+        </view>
+      </view>
+
+      <view class="dish-list">
+        <view
+          class="dish-card"
+          wx:for="{{todayMenu.dishes}}"
+          wx:key="recipeId"
+          data-id="{{item.recipeId}}"
+          data-name="{{item.name}}"
+          bindtap="onOpenRecipe"
+          hover-class="dish-card--hover"
+        >
+          <view class="dish-card__name">{{item.name}}</view>
+          <view class="dish-card__meta">
+            <view class="chip chip--muted" wx:if="{{item.category}}">{{item.category}}</view>
+            <text wx:if="{{item.cookTime}}">{{item.cookTime}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="actions">
+        <view
+          class="wte-btn wte-btn--primary wte-btn--block"
+          data-id="{{todayMenu._id}}"
+          bindtap="onOpenMenu"
+        >查看菜单详情</view>
+      </view>
+    </block>
   </block>
 
+  <!-- ============================== 历史菜单 ============================== -->
   <block wx:else>
+    <loading-state wx:if="{{historyLoading && historyMenus.length === 0}}" text="加载中..." />
+
+    <error-state
+      wx:elif="{{historyError && historyMenus.length === 0}}"
+      title="加载失败"
+      description="{{historyError}}"
+      retryText="重试"
+      bind:retry="onRetryHistory"
+    />
+
     <empty-state
+      wx:elif="{{historyMenus.length === 0}}"
       emoji="🗂️"
       title="还没有历史菜单"
       description="确认过的菜单会保存在这里，方便随时回看做法"
     />
+
+    <view class="history-list" wx:else>
+      <view
+        class="history-card"
+        wx:for="{{historyMenus}}"
+        wx:key="menuId"
+        data-id="{{item.menuId}}"
+        bindtap="onOpenMenu"
+        hover-class="history-card--hover"
+      >
+        <view class="history-card__header">
+          <view class="history-card__title">{{item.mealTypeLabel}} · {{item.servings}} 人份</view>
+          <view class="history-card__date">{{item.dateLabel}}</view>
+        </view>
+        <view class="history-card__dishes">{{item.dishSummary || '暂无菜品'}}</view>
+        <view class="history-card__meta">
+          <view class="chip chip--muted">{{item.statusLabel}}</view>
+          <text>{{item.dishCount}} 道菜</text>
+        </view>
+      </view>
+
+      <view class="load-more" wx:if="{{historyLoading}}">加载中...</view>
+      <view class="load-more" wx:elif="{{!historyHasMore}}">没有更多了</view>
+    </view>
   </block>
 </view>

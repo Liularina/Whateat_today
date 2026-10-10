@@ -1,0 +1,126 @@
+/* 家常菜谱列表（Phase 6） */
+
+/* ---------- 搜索 ---------- */
+.search {
+  display: flex;
+  align-items: center;
+  margin-top: 28rpx;
+  padding: 0 8rpx 0 28rpx;
+  height: 84rpx;
+  background: #ffffff;
+  border-radius: 999rpx;
+  box-shadow: 0 8rpx 24rpx rgba(180, 140, 105, 0.08);
+}
+
+.search__input {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--wte-text);
+}
+
+.search__clear {
+  padding: 0 16rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.search__btn {
+  flex: none;
+  padding: 0 32rpx;
+  line-height: 68rpx;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ff9a6b, #ff7a45);
+}
+
+.search__btn--hover {
+  opacity: 0.82;
+}
+
+/* ---------- 分类筛选 ---------- */
+.filters {
+  display: flex;
+  white-space: nowrap;
+  margin-top: 24rpx;
+}
+
+.filters__chip {
+  flex: none;
+  margin-right: 16rpx;
+}
+
+/* ---------- 菜谱卡片 ---------- */
+.dish-list {
+  margin-top: 24rpx;
+}
+
+.dish-card {
+  background: var(--wte-card);
+  border-radius: 24rpx;
+  padding: 28rpx 32rpx;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.dish-card + .dish-card {
+  margin-top: 20rpx;
+}
+
+.dish-card--hover {
+  background: #fffaf6;
+}
+
+.dish-card__name {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.dish-card__desc {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+  color: var(--wte-text-weak);
+}
+
+.dish-card__meta {
+  display: flex;
+  align-items: center;
+  margin-top: 18rpx;
+}
+
+.dish-card__cat {
+  flex: none;
+  padding: 6rpx 18rpx;
+  font-size: 24rpx;
+}
+
+.dish-card__meta-text {
+  margin-left: 14rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.dish-card__tags {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #c07a52;
+}
+
+/* ---------- 状态与页脚 ---------- */
+.error-tip {
+  margin-top: 20rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 26rpx;
+}
+
+.list-foot {
+  padding: 32rpx 0 8rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}

@@ -122,6 +122,8 @@ App<IAppOption>({
     familyReady: false,
     familyError: '',
     cloudReady: false,
+    lastRecommendResult: null,
+    currentMenuId: '',
   },
 
   onLaunch() {

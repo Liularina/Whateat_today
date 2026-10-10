@@ -1,0 +1,83 @@
+<view class="page">
+  <view class="page-header">
+    <view class="page-header__title">家常菜谱</view>
+    <view class="page-header__subtitle" wx:if="{{inited && !error}}">共 {{total}} 道菜谱</view>
+  </view>
+
+  <!-- 关键词搜索：点「搜索」或键盘回车才发起查询 -->
+  <view class="search">
+    <input
+      class="search__input"
+      value="{{keyword}}"
+      placeholder="搜索菜名，例如：番茄"
+      maxlength="20"
+      confirm-type="search"
+      bindinput="onKeywordInput"
+      bindconfirm="onKeywordConfirm"
+    />
+    <view class="search__clear" wx:if="{{keyword}}" catchtap="onClearKeyword">✕</view>
+    <view class="search__btn" bindtap="onKeywordConfirm" hover-class="search__btn--hover">搜索</view>
+  </view>
+
+  <!-- 分类筛选 -->
+  <scroll-view class="filters" scroll-x enable-flex>
+    <view
+      wx:for="{{categories}}"
+      wx:key="*this"
+      class="chip filters__chip {{categoryIndex === index ? 'chip--active' : ''}}"
+      data-index="{{index}}"
+      bindtap="onCategoryTap"
+    >{{item}}</view>
+  </scroll-view>
+
+  <!-- 1. 首次加载中 -->
+  <loading-state wx:if="{{loading && !inited}}" text="正在加载菜谱..." />
+
+  <!-- 2. 加载失败且没有任何数据：给明确提示与重试，不白屏 -->
+  <error-state
+    wx:elif="{{error && items.length === 0}}"
+    title="菜谱加载失败"
+    description="{{error}}"
+    bind:retry="onRetry"
+  />
+
+  <block wx:else>
+    <view class="error-tip" wx:if="{{error}}">{{error}}</view>
+
+    <!-- 3. 有数据 -->
+    <view class="dish-list" wx:if="{{items.length > 0}}">
+      <view
+        wx:for="{{items}}"
+        wx:key="_id"
+        class="dish-card"
+        data-id="{{item._id}}"
+        bindtap="onOpenRecipe"
+        hover-class="dish-card--hover"
+      >
+        <view class="dish-card__name">{{item.name}}</view>
+        <view class="dish-card__desc">{{item.description}}</view>
+        <view class="dish-card__meta">
+          <view class="chip chip--muted dish-card__cat">{{item.category}}</view>
+          <view class="dish-card__meta-text">{{item.metaText}}</view>
+        </view>
+        <view class="dish-card__tags" wx:if="{{item.tagsText}}">{{item.tagsText}}</view>
+      </view>
+    </view>
+
+    <!-- 4. 无数据：区分「筛选无结果」与「菜谱库为空」 -->
+    <empty-state
+      wx:elif="{{inited}}"
+      emoji="🍳"
+      title="{{hasFilter ? '没有找到匹配的菜谱' : '菜谱库还是空的'}}"
+      description="{{hasFilter ? '换个菜名或分类再试试' : '菜谱库还没有数据，请先在云开发环境执行初始化'}}"
+      actionText="{{hasFilter ? '清空筛选' : ''}}"
+      bind:action="onClearFilters"
+    />
+
+    <view class="list-foot" wx:if="{{items.length > 0}}">
+      <text wx:if="{{loadingMore}}">正在加载更多...</text>
+      <text wx:elif="{{hasMore}}">上拉加载更多</text>
+      <text wx:else>没有更多了</text>
+    </view>
+  </block>
+</view>

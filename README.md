@@ -2,9 +2,12 @@
 
 帮一个家庭完成「录入库存 → 推荐菜单 → 家人点菜 → 确认菜单 → 生成做法」的完整闭环。
 
-> 当前进度：**Phase 5：营养计算**。
+> 当前进度：**Phase 11：历史记录**。
 > 微信登录（Phase 2）、家庭体系（Phase 3）、食材库存增删改查（Phase 4）、
-> 营养估算（Phase 5）已可用；AI 推荐、点菜、菜单、做法仍为骨架，按后续阶段推进。
+> 营养估算（Phase 5）、基础菜谱库（Phase 6）、AI 智能推荐（Phase 7）、
+> 菜单换菜与锁定（Phase 8）、家庭点单（Phase 9）、AI 菜谱与烹饪步骤（Phase 10）、
+> 历史菜单与历史点单（Phase 11）已可用；
+> 后续阶段待规划。
 
 ## 技术栈
 
@@ -22,17 +25,21 @@
 miniprogram/
 ├── app.ts / app.json / app.wxss
 ├── assets/tabbar/           # TabBar 图标（81x81 PNG）
-├── pages/                   # 15 个页面（含 4 个家庭页 + 营养估算页）
+├── pages/                   # 18 个页面（含 4 个家庭页 + 营养估算页 + 2 个菜谱页 + AI 设置页）
 ├── components/              # 8 个公共组件
 ├── services/                # 统一封装云函数调用
 ├── types/                   # 实体 TypeScript 类型
 ├── utils/                   # cloud / storage / formatter / validator / family-form
-├── constants/               # config / categories / units
+├── constants/               # config / categories / units / recipe
 └── typings/                 # IAppOption 等全局声明
 cloudfunctions/
 ├── auth/ family/ ingredient/
 ├── nutrition/               # index.js + nutrition-core.js（纯函数）+ nutrition-data.js（基础数据）
-└── recommend/ order/ menu/ recipe/
+├── recipe/                  # index.js + openai-compatible-client.js（菜谱库 + AI 生成做法）
+├── ai-config/               # index.js + openai-compatible-client.js（用户自配 API）
+├── menu/                    # index.js + openai-compatible-client.js（菜单保存/锁定/换菜/确认）
+├── order/                   # index.js（创建点单/提交选择/汇总/关闭）
+└── recommend/ menu/
 tools/                       # 本地验证套件（内存版云开发，不依赖真实云环境）
 ```
 
@@ -73,6 +80,9 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 > `ingredient_aliases`（**可选**，缺集合时自动退回内置别名表）。
 > Phase 5 额外使用：`nutrition_facts`（**可选**，缺集合时自动退回内置基础数据；
 > 但 `seedNutritionFacts` 写入需要该集合存在）。
+> Phase 6 额外使用：`recipes`（**必需**，缺集合时 `recipe` 云函数返回 `DB_NOT_READY`，
+> 初始化也写不进去）。
+> Phase 10 额外使用：`generated_recipes`（AI 生成的做法缓存；缺集合时返回提示，不阻碍查看原始菜谱。）
 
 建议索引（避免家庭查询全表扫描）：
 
@@ -80,8 +90,8 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 | --- | --- |
 | `family_members` | `familyId`、`userId` |
 | `ingredients` | `familyId` |
-| `menus` | `familyId` |
-| `family_orders` | `familyId` |
+| `menus` | `familyId`、`familyId + status + createdAt`（Phase 11 历史列表） |
+| `family_orders` | `familyId`、`familyId + status + createdAt`（Phase 11 历史列表） |
 | `family_order_items` | `orderId` |
 | `nutrition_facts` | `standardName` |
 
@@ -213,6 +223,292 @@ tools/                       # 本地验证套件（内存版云开发，不依�
   非成员一律 `PERMISSION_DENIED`。
 - 本阶段**不做**：医疗建议、减肥方案、疾病营养方案、每日营养分析、一周营养报告。
 
+## 基础菜谱库（Phase 6）
+
+- **页面**：`pages/recipes/index`（列表，从首页「家常菜谱」进入）与
+  `pages/recipes/detail`（详情）。菜谱是**公共只读**数据，未登录也能浏览，
+  因此没有新增 TabBar 项。
+- **云函数**：`recipe`，本阶段实现三个 action —— `listRecipes` / `getRecipe` /
+  `seedRecipes`。`generateRecipe` / `retryRecipe` 仍返回 `NOT_IMPLEMENTED`，留给后续阶段。
+- **客户端没有任何写菜谱的口子**：`recipe` 云函数不提供创建 / 修改 / 删除接口，
+  内置菜谱只能由初始化脚本写入，避免被前端或误操作改坏。
+- **`listRecipes` 入参**：`{ category, keyword, page, pageSize }`
+  - `category` 默认「全部」；`page` 默认 1；`pageSize` 默认 20、上限 50；
+  - 只返回 `source = 'builtin'` 且 `isActive = true` 的菜谱；
+  - 关键词按**字面量**匹配（正则元字符已转义），最长 20 字；
+  - 返回 `{ items, total, page, pageSize }`，`items` 只含列表真正需要的字段，
+    **不夹带 `ingredients` / `steps`**；
+  - 按菜名升序稳定排序，分页用 `skip + limit`。
+- **`getRecipe` 入参**：`{ recipeId }`，返回 `{ recipe }`。
+  `recipeId` 缺失或非法 → `INVALID_PARAMS`；不存在**或已禁用** →
+  `RECIPE_NOT_FOUND`（两种情况同一个错误码，不泄露某个菜谱是否存在）。
+- **内置数据**：`cloudfunctions/recipe/recipe-data.js` 共 **33 道**菜谱，
+  分「家常菜 / 蔬菜类 / 汤类 / 主食类」四类，每道含简介、标签、难度、总时长、
+  适用人数、量化食材与逐道编写的步骤（每步带独立 `minutes`）。
+  两条硬性约束：
+  - **不允许「适量 / 少许」这类无法换算的写法** —— 否则 Phase 7 无法复用营养数据；
+
+## AI 智能推荐（Phase 7）
+
+Phase 7 允许用户自配 AI 模型 API，通过家庭食材和 Phase 6 菜谱库，由 AI 推荐 3 套菜单。
+
+### 安全
+
+| 约束 | 说明 |
+|------|------|
+| API Key 加密 | AES-256-GCM 加密存入数据库，密钥来自云函数环境变量 `USER_API_KEY_ENCRYPTION_SECRET`（64 位 hex） |
+| 前端隔离 | 查询接口只返回 `sk-****abcd` 脱敏状态，完整 Key 绝不离开云函数 |
+| URL 校验 | 仅允许 HTTPS，拒绝内网 / 回环 / 元数据地址（防 SSRF） |
+| 调用链路 | 前端 → 云函数 → 用户配置的模型服务（不经过平台后台 AI） |
+| AI 输出校验 | 推荐的 recipeId 必须在菜谱库中存在，营养值由 Phase 5 计算，不信任 AI 输出 |
+| 日志安全 | 不记录 API Key、Authorization 头或完整请求体 |
+
+### 数据模型
+
+- **集合** `user_ai_configs`：字段 userId / baseUrl / model / encryptedApiKey / keyNonce / keyAuthTag / keyVersion / createdAt / updatedAt
+- `encryptedApiKey` / `keyNonce` / `keyAuthTag` 为 AES-256-GCM 加密三要素
+- `keyVersion` 用于未来轮换密钥
+
+### 用户流程
+
+1. 用户进入「模型 API 设置」（从「我的」页或推荐页进入）
+2. 填写兼容 OpenAI Chat Completions 的 API Base URL、模型名称、API Key
+3. 点击「测试连接」验证连通性（发一条短 ping 消息）
+4. 保存配置后，在推荐页填写人数、餐次、口味偏好，点击「开始推荐」
+5. 推荐页跳转到结果页，展示 3 套菜单（每套含 title / reason / dishes / totalCookTime）
+
+### 推荐云函数工作流
+
+```
+前端入参（mealType / servings / preferences）
+  → 身份校验（OPENID → users → family_members）
+  → 读取 AI 配置（解密 API Key）
+  → 读取家庭食材
+  → 读取菜谱库（isActive=true）
+  → 生成候选列表（最多 50 个，按食材匹配度排序）
+  → 构建提示词（系统提示 + 候选菜谱 JSON + 食材清单）
+  → 调用用户自配 API（OpenAI Chat Completions）
+  → 解析 JSON → 二次校验（recipeId 存在性）
+  → 返回真实菜谱数据
+```
+
+### 前端文件
+
+| 文件 | 说明 |
+|------|------|
+| `miniprogram/types/ai-config.ts` | AiConfigInfo / AiConfigInput / AiConfigTestResult / RecommendMenusResult 等类型 |
+| `miniprogram/services/ai-config.ts` | aiConfigService（getConfig / saveConfig / deleteConfig / testConnection） |
+| `miniprogram/services/recommend.ts` | 新增 recommendMenus 方法（generateRecommendations / replaceDish 仍为桩） |
+| `miniprogram/pages/ai-settings/index.{ts,wxml,wxss,json}` | 模型 API 配置页面 |
+| `miniprogram/pages/recommend/index.{ts,wxml}` | 推荐条件收集（接入真实 AI 调用） |
+| `miniprogram/pages/recommend-result/index.{ts,wxml,wxss,json}` | 推荐结果展示 |
+
+### 用户需手动操作
+
+1. **创建数据库集合**：在云开发控制台创建 `user_ai_configs` 集合
+2. **设置环境变量**：在云函数环境变量中设置 `USER_API_KEY_ENCRYPTION_SECRET`（64 位 hex 随机串）
+3. **部署云函数**：上传 `ai-config` 和 `recommend` 两个云函数
+4. **初始化菜谱**：调用 `recipe.seedRecipes` 初始化菜谱库（如之前 Phase 6 已完成则跳过）
+
+## 菜单换菜与锁定（Phase 8）
+
+Phase 8 在 AI 推荐结果页上增加菜单调整能力：用户可从 3 套 AI 推荐中选一套保存为草稿菜单，然后锁定满意的菜品、更换不满意的菜品、批量重新推荐未锁定菜品，最后确认菜单。
+
+### menu 云函数
+
+| action | 说明 |
+|--------|------|
+| `saveMenu` | 将 AI 推荐结果保存为 draft 菜单（数据写入 `menus` 集合） |
+| `getMenu` | 按 `menuId` 查询菜单详情 |
+| `setMenuItemLocked` | 锁定 / 取消锁定一道菜 |
+| `replaceMenuItem` | 换一道菜：排除已有菜品，AI 从菜谱库中选取替换 |
+| `regenerateUnlockedItems` | 批量重新推荐：保留锁定菜品，只替换未锁定项 |
+| `confirmMenu` | 确认菜单（status → confirmed） |
+
+### 安全与数据规则
+
+| 约束 | 说明 |
+|------|------|
+| 身份校验 | `openid → users → family_members`，菜单必须属于当前家庭 |
+| 锁定保护 | 已锁定菜品不能被单独替换或批量重推覆盖 |
+| AI 输出校验 | 所有 recipeId 必须在 `recipes` 集合中存在，拒绝 AI 编造的菜品 |
+| 原子更新 | 批量重推失败时原菜单保持不变；确认后菜单不可再修改 |
+| 防重复 | 换菜和批量重推均排除已在菜单中的菜品 |
+| 候选不足 | 候选菜品不够时返回明确提示，不伪造不重复 |
+
+### 前端页面
+
+`pages/recommend-result/` 重构为三模态页面：
+
+1. **选择模式**（selection）：展示 3 套 AI 推荐方案，每套底部有「选这套」按钮
+2. **交互模式**（interactive）：展示已保存菜单，每道菜有锁定/解锁和换一道按钮；底部有「重新推荐未锁定菜品」和「确认菜单」
+3. **已确认模式**（confirmed）：只读展示 + 绿色确认横幅
+
+交互细节：
+- 锁定状态有橙色边框 + 🔒 徽章
+- 锁定/解锁操作先在 UI 乐观更新，服务端失败时回滚
+- 防止连续点击（操作期间禁用按钮）
+- 换菜返回新菜名 toast 提示
+
+### 用户需手动操作
+
+1. **创建 `menus` 集合**：云开发控制台 → 数据库 → 新建集合 `menus`，权限「仅创建者可读写」
+2. **部署 `menu` 云函数**：上传 `menu` 云函数（包含 `openai-compatible-client.js`）
+3. `menu` 云函数需要设置环境变量 `USER_API_KEY_ENCRYPTION_SECRET`（与 Phase 7 相同密钥）
+
+## 家庭点单（Phase 9）
+
+Phase 9 实现家庭点单闭环：从已确认菜单发起点单 → 家庭成员选择菜品和份数 → 管理员查看汇总 → 关闭点单。
+
+### order 云函数
+
+| action | 说明 |
+|--------|------|
+| `createOrder` | 从已确认菜单发起点单（status: open） |
+| `getOrder` | 查询点单详情（含菜品列表、当前用户选择、权限信息） |
+| `submitOrderItems` | 成员批量提交/修改自己的选择（覆盖式，非追加） |
+| `getOrderSummary` | 管理员查看汇总（按菜品 + 按成员） |
+| `closeOrder` | 管理员/发起人关闭点单（status: closed，保存最终汇总快照） |
+
+### 数据模型
+
+- **`family_orders`**：_id, familyId, menuId, title, status(open/closed), deadline, note, initiatorUserId, recipeIds[], createdAt, updatedAt, closedAt, finalSummary, totalParticipants
+- **`family_order_items`**：_id, orderId, familyId, userId, items[{ recipeId, quantity, note }], createdAt, updatedAt（每个用户每个点单一条文档）
+
+### 业务流程
+
+```
+确认菜单 → 发起点单 → 家庭成员选择菜品/份数/备注 → 管理员查看汇总 → 关闭点单
+```
+
+- 入口 1：确认菜单页（recommend-result）→「发起家庭点单」
+- 入口 2：点单 Tab 页（order/index）→「发起家庭点单」
+- 入口 3：微信分享卡片（携带 orderId）
+
+### 权限规则
+
+| 操作 | 权限 |
+|------|------|
+| 发起点单 | 任何家庭成员 |
+| 提交/修改选择 | 本人（不可修改他人） |
+| 查看汇总 | 任何家庭成员 |
+| 关闭点单 | 管理员或发起人 |
+| 重复发起同一菜单 | 拒绝（需先关闭进行中的） |
+
+### 页面
+
+| 页面 | 说明 |
+|------|------|
+| `pages/order/index` | 点单列表 Tab 页 + 发起入口 |
+| `pages/order-detail/index` | 点单详情：菜品选择（勾选/份数/备注）、保存、管理员关闭/汇总 |
+| `pages/recommend-result/index` | 确认菜单后新增「发起家庭点单」按钮 |
+
+### 用户需手动操作
+
+1. **创建数据库集合**：`family_orders` 和 `family_order_items`，权限均「仅创建者可读写」
+2. **部署 `order` 云函数**：上传 order 云函数（云端安装依赖）
+
+## AI 菜谱与烹饪步骤 / Phase 9 补齐（Phase 10）
+
+### Phase 9 遗留问题修复
+
+1. **`listOrders` action**：点单 Tab 页现在可以通过 `order.listOrders` 查询当前家庭的点单列表，支持分页和状态筛选
+2. **成员昵称**：汇总中的 `memberSummary` 现在包含 `displayName`（从 `users.nickName` 批量查得），不再只显示 `userId`
+3. **截止时间**：`createOrder` 可接受 `deadline` 并做服务端校验（格式 + 必须晚于当前时间）；`submitOrderItems` 在截止后返回 `DEADLINE_PASSED`
+
+### recipe 云函数新增
+
+| action | 说明 |
+|--------|------|
+| `generateCookingSteps` | 接收 recipeId + 可选 servings/preferences，通过用户自配 API 生成详细做法 |
+| 已有 `listRecipes` / `getRecipe` / `seedRecipes` | 保持不变 |
+
+### AI 生成流程
+
+```
+前端 → recipe.generateCookingSteps(recipeId)
+  → 读取 recipes 集合原始菜谱
+  → 检查 generated_recipes 缓存
+  → 调用用户自配 OpenAI 兼容 API
+  → 校验 JSON 结构（steps 非空、格式合法）
+  → 保存到 generated_recipes 集合
+  → 返回结构化烹饪数据
+```
+
+- **缓存优先**：已生成过的菜谱直接返回缓存，不重复调用 API
+- **不覆盖原始数据**：生成结果保存在独立的 `generated_recipes` 集合
+- **不信任 AI 输出**：服务端逐字段校验，空步骤/非法 JSON 拒绝并返回错误
+
+### 前端改造
+
+`pages/recipes/detail` 新增：
+- 未配置 API 时显示「去配置」入口
+- 已配置 API 时显示「生成详细做法」按钮
+- 生成中显示 loading 状态
+- 成功后展示：简介 → 食材准备 → 准备工作 → 详细步骤 → 小贴士 → 安全提示
+- 失败后可重试，原始菜谱始终保留
+
+### 用户需手动操作
+
+1. **创建 `generated_recipes` 集合**：云开发控制台 → 数据库，权限「仅创建者可读写」
+2. **部署 `recipe` 云函数**：上传 recipe 云函数（含 openai-compatible-client.js）
+3. **设置环境变量**：`recipe` 云函数需要 `USER_API_KEY_ENCRYPTION_SECRET`（与 Phase 7 相同）
+  - **不允许两道菜共用同一套通用步骤**，步骤必须逐道写。
+
+  食材名尽量对齐 `nutrition-data.js` 的 `standardName`，便于后续自动复用营养库。
+- **初始化（幂等）**：部署 `recipe` 后调用一次 `{"action":"seedRecipes"}`，
+  返回 `inserted` / `updated` / `total`。以 `name` 作为内置菜谱的业务唯一键，
+  已存在则更新、缺失才新增，**可重复执行不产生重复数据**；
+  且只读改 `source = 'builtin'` 的记录 —— 用户自建（`manual`）与
+  AI 生成（`ai`）菜谱既不被覆盖也不被删除。
+  本机没有云环境时直接运行 `node seed-recipes.js` 会明确报错退出，不会伪装成写入成功。
+- 本阶段**不做**：用户自建菜谱、收藏、评分、评论、拍照识菜、一周菜谱计划。
+
+## 历史记录（Phase 11）
+
+**不新增集合**：历史菜单直接读取 `menus` 中 `status = 'confirmed'` 的文档；
+每份已确认菜单本身就是一份不可变快照（`items[]` 里已保存确认时的菜名、分类、
+食材、时长），因此新菜单确认不会覆盖旧记录。历史点单读取 Phase 9 的
+`family_orders` / `family_order_items`。
+
+### 新增 / 补齐的云函数 action
+
+| action | 云函数 | 说明 |
+|--------|--------|------|
+| `getMenuHistory` | menu | 本家庭已确认菜单列表；支持分页、状态、日期范围，默认时间倒序 |
+| `getTodayMenu` | menu | 最近一份已确认菜单（原为未实现桩） |
+| `getMenu` | menu | 由「传了 familyId 才校验」改为**强制**家庭归属校验 |
+| `listOrders` / `getOrder` / `getOrderSummary` / `closeOrder` | order | 复用 Phase 9/10 实现，仅补历史展示字段与只读语义 |
+
+### 权限校验
+
+- 身份只取 `cloud.getWXContext().OPENID`，前端传的任何用户 ID 都被忽略；
+- 所有历史查询先经 `requireFamilyMember(openid, familyId)`：
+  未登录 → `UNAUTHORIZED`，非成员 → `NOT_IN_FAMILY`，缺参 → `INVALID_PARAMS`；
+- 菜单详情额外校验 `menu.familyId === 该家庭`，跨家庭 → `FORBIDDEN`；
+- 点单详情 / 汇总按 `order.familyId` 反查成员身份，跨家庭一律拒绝；
+- 分页参数上限：菜单与点单 `pageSize ≤ 50`，页码非法回退为 1；
+- 返回值不含 openid / API Key / 加密密钥；成员显示名来自 `users.nickName`，
+  缺失时回退「家庭成员」。
+
+### 页面
+
+- `pages/menu/index`：当前菜单 / 历史菜单两个标签页，历史列表触底分页、
+  空 / 加载 / 失败重试状态齐全，点击进入菜单详情，点击菜品进入菜谱详情；
+- `pages/menu-detail/index`：展示当时菜单的菜品清单（含锁定标记），
+  每道菜可跳转 Phase 6/10 的菜谱详情查看或生成做法；
+- `pages/order/index`：新增全部 / 进行中 / 已关闭筛选，展示菜单名、发起人、
+  截止时间、关闭时间与参与人数；
+- `pages/order-detail/index`：新增关闭时间展示与「做法 ›」入口；
+  已关闭订单不渲染任何编辑控件（只读）；
+- `pages/recipes/detail`：支持 `?name=` 历史菜名快照兜底——菜谱已下架/删除时
+  仍展示当时的菜名并明确提示「当前内容已不可用」；
+- `pages/mine/index`：新增「历史菜单 / 历史点单」入口。
+
+### 本阶段不做
+
+营养趋势、周报月报、消费统计、采购清单、评分评论、历史菜单一键复制。
+
 ## 校验命令
 
 ```bash
@@ -220,6 +516,8 @@ npm run typecheck          # TypeScript 严格类型检查（无输出即通过�
 npm run verify:family      # 家庭系统静态结构 + 云函数行为验证（181 项断言）
 npm run verify:ingredient  # 食材库存静态结构 + 云函数行为验证（155 项断言）
 npm run verify:nutrition   # 营养计算静态结构 + 云函数行为验证（212 项断言）
+npm run verify:recipe      # 基础菜谱库静态结构 + 云函数行为验证（170 项断言）
+npm run verify:history     # 历史菜单 / 历史点单静态结构 + 云函数行为验证（85 项断言）
 ```
 
 `verify:*` 用内存版 `wx-server-sdk`（`tools/mock-cloud.js`）驱动**真实的云函数代码**，不依赖云环境，
@@ -228,6 +526,15 @@ npm run verify:nutrition   # 营养计算静态结构 + 云函数行为验证（
 身份伪造 / 别名映射 / 入参校验 / 可写字段白名单 / 集合缺失降级 / 已解散家庭等场景；
 `verify:nutrition` 覆盖单位换算 / 计算公式 / 总量与人均 / **AI 传入营养值被丢弃** /
 缺失与无法换算降级为 `partial` / 数据库覆盖内置数据 / 基础数据一键写入 / 鉴权 / 入参校验等场景。
+`verify:recipe` 覆盖菜谱数据完整性 / 初始化幂等且不覆盖用户自建菜谱 /
+列表筛选搜索分页 / 列表不夹带食材与步骤 / 关键词正则元字符按字面量处理 /
+禁用菜谱不出现在列表与详情 / 详情「不存在」与「已禁用」同一错误码 /
+无写菜谱接口等场景。
+`verify:history` 覆盖历史菜单列表 / 时间倒序 / 分页不重复 / pageSize 上限 /
+状态与日期范围筛选 / 家庭成员共享 / 跨家庭隔离 / 未登录与缺参被拒 /
+新增菜单后旧历史仍在 / 集合缺失降级 / 菜单详情家庭归属强制校验 /
+历史点单列表与详情 / 已关闭订单只读且幂等 / 汇总来自服务端（含昵称）/
+不暴露 openid / 不存在的点单返回 ORDER_NOT_FOUND 等场景。
 加 `-- --quiet` 可只看小节标题、失败项与总计。
 
 云函数改完后建议额外做一次纯语法检查：
@@ -238,6 +545,11 @@ node --check cloudfunctions/ingredient/index.js
 node --check cloudfunctions/nutrition/index.js
 node --check cloudfunctions/nutrition/nutrition-core.js
 node --check cloudfunctions/nutrition/nutrition-data.js
+node --check cloudfunctions/recipe/index.js
+node --check cloudfunctions/recipe/recipe-data.js
+node --check cloudfunctions/recipe/seed-recipes.js
+node --check cloudfunctions/menu/index.js
+node --check cloudfunctions/order/index.js
 ```
 
 ## 第一阶段闭环（后续阶段逐步实现）
@@ -248,5 +560,6 @@ node --check cloudfunctions/nutrition/nutrition-data.js
 → 确认菜单 → 生成做法 → 查看做法
 ```
 
-Phase 1 之后各阶段：登录 → **家庭（已完成）** → **食材（已完成）** → **营养（已完成）** → 推荐 UI → recommend 云函数 →
+Phase 1 之后各阶段：登录 → **家庭（已完成）** → **食材（已完成）** → **营养（已完成）** →
+**菜谱（已完成）** → 推荐 UI → recommend 云函数 →
 AI Schema → 换菜/锁定 → 点菜 → 菜单确认 → AI 做法 → 历史 → 异常/权限 → 分享 → 完整测试。

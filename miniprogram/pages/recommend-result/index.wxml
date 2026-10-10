@@ -1,21 +1,131 @@
 <view class="page">
-  <loading-state wx:if="{{loading}}" text="正在根据冰箱里的食材安排今晚菜单..." />
+  <!-- 全屏 loading -->
+  <loading-state wx:if="{{savingMenu}}" text="正在保存菜单..." />
 
+  <!-- 选择模式：3 套 AI 推荐 -->
+  <block wx:elif="{{mode === 'selection'}}">
+    <view class="page-header">
+      <view class="page-header__title">AI 推荐结果</view>
+      <view class="page-header__subtitle" wx:if="{{mealTypeLabel}}">{{mealTypeLabel}} · {{servings}} 人份 · {{menuCount}} 套方案</view>
+    </view>
+
+    <view class="menus">
+      <view class="menu-card" wx:for="{{menus}}" wx:key="title">
+        <view class="menu-card__header">
+          <view class="menu-card__title">{{item.title}}</view>
+          <view class="menu-card__time">{{item.totalCookTime}}</view>
+        </view>
+
+        <view class="menu-card__reason" wx:if="{{item.reason}}">{{item.reason}}</view>
+
+        <view class="dish-list">
+          <view class="dish-card" wx:for="{{item.dishes}}" wx:for-item="dish" wx:key="recipeId" data-id="{{dish.recipeId}}" bindtap="onOpenRecipe" hover-class="dish-card--hover">
+            <view class="dish-card__name">{{dish.name}}</view>
+            <view class="dish-card__meta">
+              <view class="chip chip--muted">{{dish.category}}</view>
+              <text wx:if="{{dish.difficultyLabel}}">{{dish.difficultyLabel}}</text>
+              <text wx:if="{{dish.cookTime}}">{{dish.cookTime}}</text>
+            </view>
+            <view class="dish-card__ingredients" wx:if="{{dish.ingredientsText}}">食材：{{dish.ingredientsText}}</view>
+          </view>
+        </view>
+
+        <view class="wte-btn wte-btn--primary wte-btn--block menu-card__btn" data-index="{{index}}" bindtap="onSelectMenu">
+          选这套
+        </view>
+      </view>
+    </view>
+
+    <view class="actions">
+      <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onBackToRecommend">返回调整条件</view>
+    </view>
+
+    <view class="tips">菜单由 AI 基于现有食材和菜谱库推荐，营养数据请以菜谱详情为准。</view>
+  </block>
+
+  <!-- 交互模式：锁定 / 换菜 / 批量重推 / 确认 -->
+  <block wx:elif="{{mode === 'interactive' || mode === 'confirmed'}}">
+    <view class="page-header">
+      <view class="page-header__title">{{interactiveTitle || '当前菜单'}}</view>
+      <view class="page-header__subtitle">{{mealTypeLabel}} · {{servings}} 人份 · {{totalCookTime}}</view>
+    </view>
+
+    <!-- 确认后展示横幅 -->
+    <view class="confirmed-banner" wx:if="{{confirmed}}">此菜单已确认，不可再调整</view>
+
+    <view class="dish-list dish-list--interactive">
+      <view
+        class="dish-card {{dish.locked ? 'dish-card--locked' : ''}}"
+        wx:for="{{interactiveDishes}}"
+        wx:for-item="dish"
+        wx:key="recipeId"
+        data-id="{{dish.recipeId}}"
+        bindtap="onOpenRecipe"
+        hover-class="dish-card--hover"
+      >
+        <view class="dish-card__top">
+          <view class="dish-card__name">
+            {{dish.name}}
+            <text class="dish-card__lock-badge" wx:if="{{dish.locked}}">🔒</text>
+          </view>
+          <view class="dish-card__meta">
+            <view class="chip chip--muted">{{dish.category}}</view>
+            <text wx:if="{{dish.difficultyLabel}}">{{dish.difficultyLabel}}</text>
+            <text wx:if="{{dish.cookTime}}">{{dish.cookTime}}</text>
+          </view>
+        </view>
+
+        <view class="dish-card__ingredients" wx:if="{{dish.ingredientsText}}">食材：{{dish.ingredientsText}}</view>
+
+        <!-- 操作按钮 -->
+        <view class="dish-card__actions" wx:if="{{!confirmed}}" catchtap>
+          <view class="wte-btn wte-btn--sm {{dish.locked ? 'wte-btn--ghost' : 'wte-btn--primary-outline'}}"
+            data-recipe-id="{{dish.recipeId}}"
+            data-locked="{{dish.locked}}"
+            bindtap="onToggleLock">
+            {{dish.locked ? '取消锁定' : '锁定'}}
+          </view>
+          <view class="wte-btn wte-btn--sm wte-btn--ghost"
+            data-recipe-id="{{dish.recipeId}}"
+            bindtap="onReplaceDish"
+            wx:if="{{!dish.locked}}">
+            换一道
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部操作栏 -->
+    <view class="actions" wx:if="{{!confirmed}}">
+      <view class="wte-btn wte-btn--ghost wte-btn--block" wx:if="{{!loading}}" bindtap="onRegenerate">
+        重新推荐未锁定菜品
+      </view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block wte-btn--loading btn-gap" wx:else>
+        重新推荐中...
+      </view>
+
+      <view class="wte-btn wte-btn--primary wte-btn--block btn-gap" bindtap="onConfirmMenu">
+        确认菜单
+      </view>
+    </view>
+
+    <view class="tips" wx:if="{{!confirmed}}">锁定你不希望被替换的菜品，未锁定的菜品可以单独换或批量重推。</view>
+    <view class="tips" wx:else>菜单已确认！后续可以在「菜单」页查看和管理。</view>
+
+    <!-- Phase 9：已确认后发起点单 -->
+    <view class="actions" wx:if="{{confirmed}}">
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onStartOrder">
+        发起家庭点单
+      </view>
+    </view>
+  </block>
+
+  <!-- 错误 -->
   <error-state
     wx:elif="{{errorMessage}}"
-    title="暂时没安排好今晚的菜单"
+    title="出错了"
     description="{{errorMessage}}"
-    retryText="重新推荐"
-    bind:retry="onRetry"
+    retryText="返回推荐"
+    bind:retry="onBackToRecommend"
   />
-
-  <block wx:else>
-    <empty-state
-      emoji="🍲"
-      title="还没有可展示的推荐结果"
-      description="推荐结果由推荐云函数生成，将在 Phase 7 接入"
-      actionText="返回调整条件"
-      bind:action="onBackToConditions"
-    />
-  </block>
 </view>

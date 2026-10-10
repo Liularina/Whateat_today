@@ -8,6 +8,8 @@
     "verify:family": "node tools/verify-family.js",
     "verify:ingredient": "node tools/verify-ingredient.js",
     "verify:nutrition": "node tools/verify-nutrition.js",
+    "verify:recipe": "node tools/verify-recipes.js",
+    "verify:history": "node tools/verify-history.js",
     "e2e:nutrition": "node tools/e2e-nutrition.js"
   },
   "dependencies": {

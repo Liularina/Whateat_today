@@ -1,1 +1,263 @@
-/* 点菜详情：成员选择 / 份数 / 备注；截止后禁止修改 */
+/* 点单详情（Phase 9） */
+
+.page-header__note {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.closed-banner {
+  padding: 20rpx 28rpx;
+  border-radius: 16rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 28rpx;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 8rpx;
+}
+
+/* 菜品卡片 */
+
+.dish-list {
+  margin-top: 20rpx;
+}
+
+.dish-card {
+  padding: 24rpx;
+  background: #faf6f0;
+  border-radius: 16rpx;
+}
+
+.dish-card + .dish-card {
+  margin-top: 16rpx;
+}
+
+.dish-card--selected {
+  border: 2rpx solid #ff7a45;
+  background: #fff7f0;
+}
+
+.dish-card__top {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.dish-card__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.dish-card__name--link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.dish-card__link-hint {
+  font-size: 22rpx;
+  font-weight: 400;
+  color: #ff7a45;
+}
+
+.dish-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.dish-card__desc {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+/* 选择控件 */
+
+.dish-card__controls {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgba(180, 140, 105, 0.15);
+}
+
+.dish-card__toggle {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: var(--wte-text);
+}
+
+.checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #c07a52;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: transparent;
+}
+
+.checkbox--checked {
+  background: #ff7a45;
+  border-color: #ff7a45;
+  color: #fff;
+}
+
+.dish-card__qty {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.dish-card__qty-label {
+  font-size: 26rpx;
+  color: var(--wte-text);
+}
+
+.qty-input {
+  width: 120rpx;
+  height: 60rpx;
+  padding: 0 16rpx;
+  background: #fff;
+  border: 1rpx solid rgba(180, 140, 105, 0.3);
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  text-align: center;
+}
+
+.note-input {
+  margin-top: 12rpx;
+  width: 100%;
+  height: 64rpx;
+  padding: 0 20rpx;
+  background: #fff;
+  border: 1rpx solid rgba(180, 140, 105, 0.3);
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  box-sizing: border-box;
+}
+
+/* 只读已选 */
+
+.dish-card__selected-info {
+  margin-top: 16rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.dish-card__note {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.chip--active {
+  background: #fff3e8;
+  color: #ff7a45;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 24rpx;
+}
+
+/* 底部 */
+
+.actions {
+  margin-top: 40rpx;
+}
+
+.btn-gap {
+  margin-top: 20rpx;
+}
+
+/* 汇总弹窗 */
+
+.overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.overlay__card {
+  width: 600rpx;
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 40rpx 32rpx;
+  overflow-y: auto;
+}
+
+.overlay__title {
+  font-size: 34rpx;
+  font-weight: 600;
+}
+
+.overlay__desc {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.overlay__actions {
+  margin-top: 28rpx;
+  display: flex;
+}
+
+.summary-section {
+  margin-top: 24rpx;
+}
+
+.summary-section__title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+  margin-bottom: 12rpx;
+  padding-bottom: 8rpx;
+  border-bottom: 1rpx solid var(--wte-line);
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 0;
+}
+
+.summary-row__name {
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+.summary-row__stats {
+  font-size: 24rpx;
+  color: #c07a52;
+}
+
+.summary-member {
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--wte-line);
+}
+
+.summary-member__name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+  padding-bottom: 4rpx;
+}
+
+.summary-member__item {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  padding: 4rpx 0;
+}

@@ -1,0 +1,9 @@
+{
+  "name": "ai-config",
+  "version": "1.0.0",
+  "description": "今天吃什么 · ai-config 云函数（用户自定义模型 API 配置）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

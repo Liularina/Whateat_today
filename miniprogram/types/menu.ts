@@ -20,43 +20,101 @@ export interface MenuItem {
   recipeId: string;
   name: string;
   description: string;
+  category: string;
+  tags: string[];
   ingredients: RecipeIngredient[];
   cookTime: number;
   difficulty: Difficulty;
+  servings: number;
   /** 该菜由服务端重新计算的营养值 */
-  nutrition: NutritionSummary;
+  nutrition?: NutritionSummary;
+  /** Phase 8：锁定状态 */
+  locked: boolean;
+  /** Phase 8：显示顺序（0-based） */
+  position: number;
+  /** Phase 8：菜品来源 */
+  source: 'ai_recommendation' | 'manual_replacement';
 }
 
-/** menus 集合文档：最终确认菜单 */
+/** menus 集合文档 */
 export interface Menu {
   _id: string;
   familyId: string;
+  userId: string;
   mealType: MealType;
-  peopleCount: number;
+  servings: number;
   items: MenuItem[];
-  totalNutrition: NutritionSummary;
-  perPersonNutrition: NutritionSummary;
   status: MenuStatus;
-  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
-/** 历史菜单列表项 */
-export interface MenuHistoryItem {
+/** 菜单列表项（Phase 11 历史菜单） */
+export interface MenuListItem {
   _id: string;
-  familyId: string;
+  menuId: string;
   mealType: MealType;
-  /** 展示用日期，格式 YYYY-MM-DD */
+  servings: number;
+  status: MenuStatus;
   dateLabel: string;
+  dishCount: number;
   dishNames: string[];
-  perPersonCalories: number;
   createdAt: string;
+  updatedAt: string;
 }
 
-/** 今日菜单查询结果 */
+/** getMenuHistory 入参 */
+export interface MenuHistoryParams {
+  familyId: string;
+  page?: number;
+  pageSize?: number;
+  status?: MenuStatus;
+  startDate?: string;
+  endDate?: string;
+}
+
+/** getMenuHistory 返回 */
+export interface MenuHistoryResult {
+  items: MenuListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** getTodayMenu 返回 */
 export interface TodayMenuResult {
   menu: Menu | null;
-  /** 该菜单对应的做法是否已生成完毕 */
   recipeGenerated: boolean;
+}
+
+/** 锁定/取消锁定返回 */
+export interface LockItemResult {
+  menuId: string;
+  recipeId: string;
+  locked: boolean;
+  updatedAt: string;
+}
+
+/** 换菜返回 */
+export interface ReplaceItemResult {
+  menuId: string;
+  replaced: { recipeId: string; name: string };
+  newItem: MenuItem;
+  updatedAt: string;
+}
+
+/** 批量重推返回 */
+export interface RegenerateResult {
+  menuId: string;
+  items: MenuItem[];
+  lockedCount: number;
+  replacedCount: number;
+  updatedAt: string;
+}
+
+/** 确认菜单返回 */
+export interface ConfirmResult {
+  menuId: string;
+  status: string;
+  updatedAt: string;
 }

@@ -72,6 +72,14 @@ export const MEAL_TYPES: readonly MealTypeOption[] = [
 /** 口味，第一阶段为家庭级设置 */
 export const TASTE_OPTIONS: readonly string[] = ['不限', '清淡', '家常', '偏辣', '重口', '酸甜'];
 
+/** 餐次 → 展示文案（Phase 11 起多处复用） */
+export const MEAL_TYPE_LABELS: Record<string, string> = {
+  breakfast: '早餐',
+  lunch: '午餐',
+  dinner: '晚餐',
+  midnight_snack: '夜宵',
+};
+
 /** 难度展示文案 */
 export const DIFFICULTY_LABELS: Record<string, string> = {
   easy: '简单',
@@ -244,4 +252,12 @@ export const CLOUD_ERROR_CODES = {
   /* 营养计算相关（Phase 5） */
   CALCULATE_NUTRITION_FAILED: 'CALCULATE_NUTRITION_FAILED',
   SEED_NUTRITION_FAILED: 'SEED_NUTRITION_FAILED',
+
+  /* 菜谱相关（Phase 6） */
+  RECIPE_NOT_FOUND: 'RECIPE_NOT_FOUND',
+  SEED_RECIPES_FAILED: 'SEED_RECIPES_FAILED',
+
+  /* AI 推荐相关（Phase 7） */
+  AI_CONFIG_REQUIRED: 'AI_CONFIG_REQUIRED',
+  AI_CALL_FAILED: 'AI_CALL_FAILED',
 } as const;

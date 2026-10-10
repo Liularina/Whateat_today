@@ -12,13 +12,22 @@
  *   mock.setOpenid('openid-a');
  *   await fn.main({ action: 'createFamily' });
  *
- * 已支持：where / orderBy / limit / get / count / remove / update / doc().get|update|remove / add
- * 未支持：聚合、事务、正则查询、分页 skip —— 第一阶段的云函数用不到。
+ * 已支持：where / orderBy / skip / limit / get / count / remove / update /
+ *        doc().get|update|remove / add / command.in / db.RegExp
+ * 未支持：聚合、事务 —— 第一阶段的云函数用不到。
  */
 const Module = require('module');
 
 /** 内部使用的「in」命令标记，避免与真实字段名冲突 */
 const IN_CMD = '__in__';
+
+/** 内部使用的正则标记，对应 db.RegExp({ regexp, options }) */
+const REGEXP_CMD = '__regexp__';
+
+/** 内部使用的比较 / 逻辑命令标记，对应 db.command.gte / lte / and */
+const GTE_CMD = '__gte__';
+const LTE_CMD = '__lte__';
+const AND_CMD = '__and__';
 
 /** 规范第 12.13 节列出的全部集合 */
 const KNOWN_COLLECTIONS = [
@@ -83,17 +92,44 @@ function createMockCloud() {
     in(values) {
       return { [IN_CMD]: Array.isArray(values) ? values.slice() : [] };
     },
+    gte(value) {
+      return { [GTE_CMD]: value };
+    },
+    lte(value) {
+      return { [LTE_CMD]: value };
+    },
+    and() {
+      const conditions = Array.prototype.slice.call(arguments);
+      return { [AND_CMD]: conditions };
+    },
   };
 
-  function matches(doc, condition) {
-    return Object.keys(condition).every((key) => {
-      const expected = condition[key];
-      const actual = doc[key];
-      if (expected && typeof expected === 'object' && expected[IN_CMD]) {
+  /** 判断单个字段值是否满足（可能是普通值，也可能是命令对象） */
+  function matchValue(actual, expected) {
+    if (expected && typeof expected === 'object') {
+      if (expected[AND_CMD]) {
+        return expected[AND_CMD].every((sub) => matchValue(actual, sub));
+      }
+      if (Object.prototype.hasOwnProperty.call(expected, GTE_CMD)) {
+        return actual >= expected[GTE_CMD];
+      }
+      if (Object.prototype.hasOwnProperty.call(expected, LTE_CMD)) {
+        return actual <= expected[LTE_CMD];
+      }
+      if (expected[REGEXP_CMD]) {
+        const spec = expected[REGEXP_CMD];
+        const text = actual === null || actual === undefined ? '' : String(actual);
+        return new RegExp(spec.source, spec.flags).test(text);
+      }
+      if (expected[IN_CMD]) {
         return expected[IN_CMD].indexOf(actual) !== -1;
       }
-      return actual === expected;
-    });
+    }
+    return actual === expected;
+  }
+
+  function matches(doc, condition) {
+    return Object.keys(condition).every((key) => matchValue(doc[key], condition[key]));
   }
 
   function assertCollection(name) {
@@ -105,7 +141,7 @@ function createMockCloud() {
   }
 
   function makeQuery(name, queryState) {
-    const current = queryState || { condition: {}, order: null, take: 0 };
+    const current = queryState || { condition: {}, order: null, take: 0, skip: 0 };
 
     return {
       where(next) {
@@ -119,6 +155,9 @@ function createMockCloud() {
       limit(count) {
         return makeQuery(name, Object.assign({}, current, { take: count }));
       },
+      skip(count) {
+        return makeQuery(name, Object.assign({}, current, { skip: count }));
+      },
       async get() {
         assertCollection(name);
         let rows = ensureCollection(name).filter((doc) => matches(doc, current.condition));
@@ -131,6 +170,9 @@ function createMockCloud() {
             if (left === right) return 0;
             return left > right ? factor : -factor;
           });
+        }
+        if (current.skip > 0) {
+          rows = rows.slice(current.skip);
         }
         if (current.take > 0) {
           rows = rows.slice(0, current.take);
@@ -174,13 +216,16 @@ function createMockCloud() {
   function makeCollection(name) {
     return {
       where(condition) {
-        return makeQuery(name, { condition: condition, order: null, take: 0 });
+        return makeQuery(name, { condition: condition, order: null, take: 0, skip: 0 });
       },
       orderBy(field, direction) {
-        return makeQuery(name, { condition: {}, order: { field, direction }, take: 0 });
+        return makeQuery(name, { condition: {}, order: { field, direction }, take: 0, skip: 0 });
       },
       limit(count) {
-        return makeQuery(name, { condition: {}, order: null, take: count });
+        return makeQuery(name, { condition: {}, order: null, take: count, skip: 0 });
+      },
+      skip(count) {
+        return makeQuery(name, { condition: {}, order: null, take: 0, skip: count });
       },
       doc(id) {
         return {
@@ -233,7 +278,17 @@ function createMockCloud() {
       return { OPENID: state.currentOpenid };
     },
     database() {
-      return { collection: makeCollection, command };
+      return {
+        collection: makeCollection,
+        command,
+        /** 与云端一致：db.RegExp({ regexp: '番茄', options: 'i' }) */
+        RegExp(options) {
+          const spec = typeof options === 'string' ? { regexp: options } : options || {};
+          return {
+            [REGEXP_CMD]: { source: String(spec.regexp || ''), flags: String(spec.options || '') },
+          };
+        },
+      };
     },
     __setOpenid(value) {
       state.currentOpenid = value;

@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "模型 API 设置",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}
