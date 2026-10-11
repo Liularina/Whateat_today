@@ -534,6 +534,14 @@ const handlers = {
   retryRecipe() {
     return fail('NOT_IMPLEMENTED', 'recipe.retryRecipe 尚未实现');
   },
+
+  /**
+   * 查询某道菜在当前菜单下的做法（Phase 7/8）
+   * TODO: 按开发阶段实现，服务端必须做权限校验与入参校验
+   */
+  getRecipeDetail() {
+    return fail('NOT_IMPLEMENTED', 'recipe.getRecipeDetail 尚未实现');
+  },
 };
 
 /* ------------------------------ 入口 ------------------------------ */

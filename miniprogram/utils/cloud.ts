@@ -128,13 +128,22 @@ export function normalizeError(error: unknown, taskName = ''): AppError {
     return error;
   }
 
-  const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+  // 兼容 WeChat 云函数返回的 {errCode, errMsg} 普通对象
+  let rawMessage: string;
+  if (error instanceof Error) {
+    rawMessage = error.message;
+  } else if (error && typeof error === 'object') {
+    const wechatErr = error as { errCode?: number; errMsg?: string; message?: string };
+    rawMessage = wechatErr.errMsg || wechatErr.message || String(error);
+  } else {
+    rawMessage = String(error ?? '');
+  }
 
   if (/timeout|超时/i.test(rawMessage)) {
     return new AppError('TIMEOUT', '请求超时，请检查网络后重试');
   }
 
-  if (/cloud function|FunctionName|not found|-501000|FunctionName parameter/i.test(rawMessage)) {
+  if (/cloud\.?callFunction|cloud function|FunctionName|not found|-501000|-504002|function has no/i.test(rawMessage)) {
     return new AppError(
       'CLOUD_FUNCTION_UNAVAILABLE',
       `云函数${taskName ? ` ${taskName} ` : ''}暂时不可用，请确认已部署并已构建 npm`,

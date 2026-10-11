@@ -1,7 +1,6 @@
 {
   "navigationBarTitleText": "推荐结果",
   "usingComponents": {
-    "empty-state": "/components/empty-state/index",
     "error-state": "/components/error-state/index",
     "loading-state": "/components/loading-state/index"
   }

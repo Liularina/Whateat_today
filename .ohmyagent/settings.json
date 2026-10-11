@@ -19,6 +19,10 @@
     {
       "tool": "Cmd(cd *)",
       "decision": "allow"
+    },
+    {
+      "tool": "Cmd(if *)",
+      "decision": "allow"
     }
   ]
 }

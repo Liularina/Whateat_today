@@ -1,6 +1,0 @@
-{
-  "navigationBarTitleText": "做法",
-  "usingComponents": {
-    "empty-state": "/components/empty-state/index"
-  }
-}

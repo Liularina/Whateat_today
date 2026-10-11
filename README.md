@@ -84,16 +84,61 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 > 初始化也写不进去）。
 > Phase 10 额外使用：`generated_recipes`（AI 生成的做法缓存；缺集合时返回提示，不阻碍查看原始菜谱。）
 
-建议索引（避免家庭查询全表扫描）：
+### 索引创建清单（Phase 11 已按真实查询核对）
+
+> 仓库内**没有**数据库索引配置文件（只有 `project.config.json` / `package.json` / `tsconfig.json`），
+> 微信云开发也不支持用该格式自动建索引，因此这里只给出手工执行清单，**不新增配置文件**。
+> 下面的字段顺序与升降序都是照着代码里的 `where/orderBy` 反推的，不是拍脑袋定的。
+
+**`menus`（历史菜单 + 当前菜单）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询代码 |
+| --- | --- | --- | --- |
+| 1 | `familyId`, `status`, `createdAt` | ↑, ↑, ↓ | `menu/index.js:716` `getTodayMenu`；`menu/index.js:768/772` `getMenuHistory` |
+
+- 两处查询都是 `where({familyId, status}).orderBy('createdAt','desc')`，
+  `familyId` / `status` 恒为等值条件、`createdAt` 恒为排序字段，一个复合索引全包。
+- 有了该索引，单独的 `familyId` 索引就是**前缀重复**，不用再建。
+- `getMenuHistory` 的日期范围（`createdAt` 的 `gte/lte`）落在索引最后一列，仍可走索引。
+
+**`family_orders`（历史点单 + 列表）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询代码 |
+| --- | --- | --- | --- |
+| 2 | `familyId`, `createdAt` | ↑, ↓ | `order/index.js:548` `listOrders`（不筛状态） |
+| 3 | `familyId`, `status`, `createdAt` | ↑, ↑, ↓ | `order/index.js:548` `listOrders`（按进行中/已关闭筛选） |
+| 4（可选） | `familyId`, `menuId`, `status` | ↑, ↑, ↑ | `order/index.js:206` `createOrder` 重复点单检查 |
+
+- 必须拆成 #2 和 #3：`status` 是**可选**条件，一旦索引里 `status` 夹在
+  `familyId` 与 `createdAt` 之间，不筛状态时排序就用不上该索引。
+- 方向必须和 `orderBy('createdAt','desc')` 一致（`createdAt` 用 ↓），否则退化为内存排序。
+- #4 只在「发起点单」这一条低频写路径上用到；数据量不大时**可以不建**，
+  建了也只是让这次重复检查不走全表扫描。
+
+**`family_order_items`（点单明细）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询代码 |
+| --- | --- | --- | --- |
+| 5 | `orderId`, `userId` | ↑, ↑ | `order/index.js:283/370` `where({orderId,userId})`；`order/index.js:425/621` `where({orderId})` |
+
+- 复合索引前缀是 `orderId`，因此**只需要这一个**，
+  原来表里那条单独的 `orderId` 索引可以不要再建。
+
+**其它集合（沿用之前的建议，未改动）**
 
 | 集合 | 索引字段 |
 | --- | --- |
 | `family_members` | `familyId`、`userId` |
 | `ingredients` | `familyId` |
-| `menus` | `familyId`、`familyId + status + createdAt`（Phase 11 历史列表） |
-| `family_orders` | `familyId`、`familyId + status + createdAt`（Phase 11 历史列表） |
-| `family_order_items` | `orderId` |
 | `nutrition_facts` | `standardName` |
+
+**字段可用性核对**：`menus` 的所有写入路径（`menu/index.js:308` `createMenu`、
+`confirmMenu`、`setMenuItemLocked`、`replaceMenuItem`、`regenerateMenu`）都会落
+`familyId` / `status` / `createdAt`；`family_orders` 的写入路径（`order/index.js:236`）
+同样落 `familyId` / `status` / `createdAt` / `menuId`。**不需要为了建索引改动任何业务数据。**
+
+在云开发控制台的执行位置：数据库 → 选择集合 → 索引管理 → 新建索引 →
+按上表填字段与升降序 → 保存（等索引构建完成，历史数据量大时需要一点时间）。
 
 ### users 唯一索引（登录幂等必需）
 

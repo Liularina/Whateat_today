@@ -1,7 +1,6 @@
 {
   "navigationBarTitleText": "点单详情",
   "usingComponents": {
-    "empty-state": "/components/empty-state/index",
     "error-state": "/components/error-state/index",
     "loading-state": "/components/loading-state/index"
   }
