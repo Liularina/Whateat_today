@@ -28,6 +28,8 @@ export interface MenuItem {
   servings: number;
   /** 该菜由服务端重新计算的营养值 */
   nutrition?: NutritionSummary;
+  /** 该菜的营养计算状态：complete（全有数据）或 partial（有食材缺数据/无法换算） */
+  nutritionStatus?: 'complete' | 'partial';
   /** Phase 8：锁定状态 */
   locked: boolean;
   /** Phase 8：显示顺序（0-based） */
@@ -45,6 +47,8 @@ export interface Menu {
   servings: number;
   items: MenuItem[];
   status: MenuStatus;
+  /** 整体营养计算状态（确认时写入） */
+  nutritionStatus?: 'complete' | 'partial';
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +63,10 @@ export interface MenuListItem {
   dateLabel: string;
   dishCount: number;
   dishNames: string[];
+  /** Phase A：该菜单的合计热量（kcal），来自确认时的营养快照；无数据时为 0 */
+  totalCalories: number;
+  /** Phase A：该菜单的营养计算状态 */
+  nutritionStatus: 'complete' | 'partial' | 'unknown';
   createdAt: string;
   updatedAt: string;
 }

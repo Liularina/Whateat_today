@@ -76,7 +76,15 @@ Page({
     error: '',
   },
 
-  onLoad() {
+  /**
+   * 支持从其他页面带 keyword 直接进入（如食材页的「查看做法」）。
+   * 参数只作为初始筛选条件，用户仍可自由修改。
+   */
+  onLoad(query?: Record<string, string | undefined>) {
+    const keyword = query && query.keyword ? String(query.keyword).trim() : '';
+    if (keyword) {
+      this.setData({ keyword: keyword, activeKeyword: keyword, hasFilter: true });
+    }
     void this.loadFirstPage();
   },
 

@@ -10,6 +10,11 @@
       data-tab="history"
       bindtap="onSwitchTab"
     >历史菜单</view>
+    <view
+      class="tabs__item {{activeTab === 'calendar' ? 'tabs__item--active' : ''}}"
+      data-tab="calendar"
+      bindtap="onSwitchTab"
+    >日历</view>
   </view>
 
   <!-- 无家庭 -->
@@ -79,7 +84,7 @@
   </block>
 
   <!-- ============================== 历史菜单 ============================== -->
-  <block wx:else>
+  <block wx:elif="{{activeTab === 'history'}}">
     <loading-state wx:if="{{historyLoading && historyMenus.length === 0}}" text="加载中..." />
 
     <error-state
@@ -114,11 +119,135 @@
         <view class="history-card__meta">
           <view class="chip chip--muted">{{item.statusLabel}}</view>
           <text>{{item.dishCount}} 道菜</text>
+          <text wx:if="{{item.kcalLabel}}" class="history-card__kcal">{{item.kcalLabel}}</text>
         </view>
       </view>
 
       <view class="load-more" wx:if="{{historyLoading}}">加载中...</view>
       <view class="load-more" wx:elif="{{!historyHasMore}}">没有更多了</view>
+    </view>
+  </block>
+
+  <!-- ================================================================ -->
+  <!--                           日  历                                  -->
+  <!-- ================================================================ -->
+  <block wx:elif="{{activeTab === 'calendar'}}">
+    <!-- 导航栏 -->
+    <view class="cal-nav">
+      <view class="cal-nav__left" bindtap="onPrevMonth">
+        <text class="cal-nav__arrow">◀</text>
+      </view>
+      <view class="cal-nav__center">{{calendarYear}} 年 {{calendarMonth}} 月</view>
+      <view class="cal-nav__right" bindtap="onNextMonth">
+        <text class="cal-nav__arrow">▶</text>
+      </view>
+    </view>
+
+    <!-- 模式切换 -->
+    <view class="cal-modes">
+      <view
+        class="cal-modes__item {{calendarMode === 'month' ? 'cal-modes__item--active' : ''}}"
+        data-mode="month"
+        bindtap="onCalendarMode"
+      >月</view>
+      <view
+        class="cal-modes__item {{calendarMode === 'week' ? 'cal-modes__item--active' : ''}}"
+        data-mode="week"
+        bindtap="onCalendarMode"
+      >周</view>
+    </view>
+
+    <loading-state wx:if="{{calendarLoading}}" text="加载中..." />
+
+    <!-- ===== 月视图 ===== -->
+    <block wx:elif="{{calendarMode === 'month' && !calendarLoading}}">
+      <view class="cal weekdays">
+        <view class="cal__weekday" wx:for="{{['日','一','二','三','四','五','六']}}" wx:key="*this">{{item}}</view>
+      </view>
+      <view class="cal month-grid">
+        <view
+          class="cal-cell {{item.isCurrentMonth ? '' : 'cal-cell--dim'}} {{item.isToday ? 'cal-cell--today' : ''}} {{item.hasMenu ? 'cal-cell--has-menu' : ''}}"
+          wx:for="{{calendarDays}}"
+          wx:key="date"
+          data-date="{{item.date}}"
+          bindtap="onDayTap"
+        >
+          <view class="cal-cell__day">{{item.day}}</view>
+          <view class="cal-cell__dots" wx:if="{{item.hasMenu}}">
+            <view
+              class="cal-cell__dot {{menu.nutritionStatus === 'partial' ? 'cal-cell__dot--warn' : ''}}"
+              wx:for="{{item.menus}}"
+              wx:for-item="menu"
+              wx:key="_id"
+            />
+          </view>
+        </view>
+      </view>
+
+      <empty-state
+        wx:if="{{calendarDays.length === 0}}"
+        emoji="📅"
+        title="本月暂无菜单"
+      />
+    </block>
+
+    <!-- ===== 周视图 ===== -->
+    <block wx:elif="{{calendarMode === 'week' && !calendarLoading}}">
+      <view class="week-strip">
+        <view
+          class="week-day {{item.isToday ? 'week-day--today' : ''}}"
+          wx:for="{{weekBars}}"
+          wx:key="date"
+          data-date="{{item.date}}"
+          bindtap="onDayTap"
+        >
+          <view class="week-day__name">{{item.dayLabel}}</view>
+          <view class="week-day__num">{{item.dayNum}}</view>
+          <view class="week-day__kcal" wx:if="{{item.kcalLabel}}">{{item.kcalLabel}}</view>
+          <view class="week-day__dot" wx:if="{{item.menuCount > 0}}">
+            <text>{{item.menuCount}}</text>
+          </view>
+          <view class="week-day__empty" wx:else>
+            <text>—</text>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- ===== 日视图弹层 ===== -->
+    <view class="cal-day-mask" wx:if="{{selectedDate}}" bindtap="onCloseDay">
+      <view class="cal-day-panel" catchtap="">
+        <view class="cal-day-panel__header">
+          <view class="cal-day-panel__date">{{selectedDateLabel}}</view>
+          <view class="cal-day-panel__close" bindtap="onCloseDay">✕</view>
+        </view>
+
+        <empty-state
+          wx:if="{{selectedDayMenus.length === 0}}"
+          emoji="🍽️"
+          title="当天没有菜单"
+          description="试试其他日期"
+        />
+
+        <view class="cal-day-list" wx:else>
+          <view
+            class="cal-day-item"
+            wx:for="{{selectedDayMenus}}"
+            wx:key="menuId"
+            data-id="{{item.menuId}}"
+            bindtap="onOpenMenu"
+            hover-class="cal-day-item--hover"
+          >
+            <view class="cal-day-item__head">
+              <view class="cal-day-item__type">{{item.mealTypeLabel}}</view>
+              <view class="cal-day-item__count">{{item.dishCount}} 道菜</view>
+            </view>
+            <view class="cal-day-item__kcal" wx:if="{{item.kcalLabel}}">{{item.kcalLabel}}</view>
+            <view class="cal-day-item__status" wx:elif="{{item.nutritionStatus === 'partial'}}">部分数据缺失</view>
+            <view class="cal-day-item__status" wx:else>暂无热量数据</view>
+          </view>
+        </view>
+      </view>
     </view>
   </block>
 </view>

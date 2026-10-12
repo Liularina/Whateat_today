@@ -1,5 +1,6 @@
 .ingredient {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   padding: 24rpx 0;
   border-bottom: 2rpx solid var(--wte-line);
@@ -9,8 +10,15 @@
   border-bottom: none;
 }
 
+/* 已过期整体降低存在感，但仍可操作 */
+.ingredient--expired .ingredient__name,
+.ingredient--expired .ingredient__qty {
+  color: #b3a79b;
+}
+
 .ingredient__main {
   flex: 1;
+  min-width: 0;
 }
 
 .ingredient__name {
@@ -42,7 +50,17 @@
 }
 
 .ingredient__expire {
+  color: var(--wte-text-weak);
+}
+
+.ingredient__shelf--warning {
+  color: #d98418;
+  font-weight: 600;
+}
+
+.ingredient__shelf--expired {
   color: #e34d59;
+  font-weight: 600;
 }
 
 .ingredient__qty {
@@ -51,8 +69,18 @@
   font-weight: 600;
 }
 
-.ingredient__delete {
-  padding: 10rpx 20rpx;
-  font-size: 26rpx;
-  color: #b3a79b;
+/* 快捷操作行：换到第二行，占满整宽 */
+.ingredient__ops {
+  width: 100%;
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.ingredient__op {
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+  background: #f7f2ec;
+  font-size: 24rpx;
+  color: #9a8c7d;
 }

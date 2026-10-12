@@ -1,4 +1,4 @@
-/* 菜单详情（Phase 11） */
+/* 菜单详情（Phase 11 → A3 营养展示） */
 
 .meta-row {
   display: flex;
@@ -13,6 +13,52 @@
   color: #c07a52;
 }
 
+/* 营养汇总 */
+.nutrition-summary {
+  margin-bottom: 24rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 16rpx;
+  background: linear-gradient(135deg, #fff5eb, #fff0e0);
+  border: 1rpx solid #ffe0c0;
+}
+
+.nutrition-summary__head {
+  display: flex;
+  align-items: baseline;
+  gap: 14rpx;
+}
+
+.nutrition-summary__label {
+  font-size: 26rpx;
+  color: #9a8c7d;
+}
+
+.nutrition-summary__kcal {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #ff7a45;
+}
+
+.nutrition-summary__sub {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #c2947a;
+}
+
+.nutrition-summary__warn {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #f5a623;
+  line-height: 1.5;
+}
+
+.nutrition-summary__note {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #d4c5b5;
+}
+
+/* 菜品列表 */
 .dish-list {
   margin-top: 4rpx;
 }
@@ -49,6 +95,24 @@
   font-size: 24rpx;
   color: var(--wte-text-weak);
   flex-wrap: wrap;
+}
+
+.dish-card__nutrition {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-top: 8rpx;
+}
+
+.dish-card__kcal {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ff7a45;
+}
+
+.dish-card__partial-hint {
+  font-size: 22rpx;
+  color: #f5a623;
 }
 
 .dish-card__desc {

@@ -67,6 +67,10 @@ function toIsoString(date) {
   return d.toISOString();
 }
 
+/* ============================== 食材过期过滤（Phase B） ============================== */
+
+const { todayInBeijing, filterExpired } = require('./shelf-filter');
+
 /* ============================== 用户与家庭校验 ============================== */
 
 async function findUserByOpenid(openid) {
@@ -104,6 +108,13 @@ async function requireFamilyMember(openid, familyId) {
 
 /** 候选菜谱数量上限 */
 const MAX_CANDIDATES = 50;
+
+/**
+ * 真正写进提示词的候选数量。
+ * 候选列表已按食材匹配度降序排列，取前 N 条即可；全部塞进去会明显拖慢预填充，
+ * 对选菜质量帮助有限。
+ */
+const MAX_PROMPT_CANDIDATES = 25;
 
 /** 每次推荐的菜单套数 */
 const MENU_COUNT = 3;
@@ -225,7 +236,15 @@ async function handleRecommendMenus(event, wxContext) {
       .where({ familyId: event.familyId })
       .limit(200)
       .get();
-    ingredients = ingResult.data || [];
+    const allIngredients = ingResult.data || [];
+
+    // Phase B：已过期的食材不参与推荐，避免拿坏掉的菜去匹配
+    const today = todayInBeijing();
+    const filtered = filterExpired(allIngredients, today);
+    ingredients = filtered.kept;
+    if (filtered.skipped > 0) {
+      console.log('[recommend] 已跳过 ' + filtered.skipped + ' 种过期食材');
+    }
   } catch (e) {
     if (isCollectionMissing(e)) {
       return fail('DB_NOT_READY', '数据库集合 ingredients 不存在');
@@ -293,7 +312,7 @@ async function handleRecommendMenus(event, wxContext) {
     '当前家庭食材：' + inventoryList,
     '',
     '候选菜谱列表（JSON）：',
-    JSON.stringify(candidates.map((c) => ({
+    JSON.stringify(candidates.slice(0, MAX_PROMPT_CANDIDATES).map((c) => ({
       id: c.id,
       name: c.name,
       category: c.category,
@@ -334,7 +353,8 @@ async function handleRecommendMenus(event, wxContext) {
       'AI_AUTH_FAILED': '模型认证失败，请检查 API 配置',
       'AI_CONNECTION_FAILED': '无法连接到模型服务，请检查 API 地址',
       'AI_NOT_FOUND': '模型不存在，请检查模型名称',
-      'AI_TIMEOUT': '模型响应超时，请稍后重试或更换服务商',
+      'AI_TIMEOUT': '模型响应超时。请稍后重试；若持续出现，请在「模型 API 设置」中改用响应更快的模型',
+      'AI_EMPTY_RESPONSE': '模型没有返回有效内容，请检查该模型是否兼容 OpenAI 对话接口',
       'AI_REQUEST_FAILED': '模型请求失败，请检查 API 配置',
       'DECRYPT_FAILED': '密钥解密失败，请重新配置 API Key',
     };

@@ -15,6 +15,23 @@
       <view class="page-header__subtitle" wx:if="{{dateLabel}}">{{dateLabel}}</view>
     </view>
 
+    <!-- 营养汇总卡片 -->
+    <view class="nutrition-summary" wx:if="{{nutrition.totalKcal > 0 || nutrition.showWarning}}">
+      <view class="nutrition-summary__head">
+        <text class="nutrition-summary__label">热量</text>
+        <text class="nutrition-summary__kcal">{{nutrition.kcalLabel}}</text>
+      </view>
+      <view class="nutrition-summary__sub" wx:if="{{nutrition.perPersonLabel}}">
+        {{nutrition.perPersonLabel}}
+      </view>
+      <view class="nutrition-summary__warn" wx:if="{{nutrition.showWarning}}">
+        ⚠ {{nutrition.computedCount}}/{{nutrition.dishCount}} 道菜有营养数据，其余缺少食材数据
+      </view>
+      <view class="nutrition-summary__note" wx:elif="{{nutrition.nutritionStatus === 'unknown'}}">
+        暂无营养数据（在确认菜单时计算）
+      </view>
+    </view>
+
     <view class="meta-row">
       <view class="chip chip--muted">{{statusLabel}}</view>
       <text>{{dishes.length}} 道菜</text>
@@ -44,6 +61,16 @@
             <text wx:if="{{item.cookTime}}">{{item.cookTime}}</text>
           </view>
         </view>
+
+        <!-- 营养行 -->
+        <view class="dish-card__nutrition" wx:if="{{item.hasNutrition}}">
+          <text class="dish-card__kcal">{{item.kcalLabel}}</text>
+          <text wx:if="{{item.isPartial}}" class="dish-card__partial-hint">（部分食材无数据）</text>
+        </view>
+        <view class="dish-card__nutrition-row" wx:elif="{{item.nutritionRow}}">
+          {{item.nutritionRow}}
+        </view>
+
         <view class="dish-card__desc" wx:if="{{item.description}}">{{item.description}}</view>
         <view class="dish-card__ing" wx:if="{{item.ingredientsText}}">食材：{{item.ingredientsText}}</view>
       </view>

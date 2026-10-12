@@ -24,6 +24,13 @@ mock.install();
 
 const familyFn = require(path.join(__dirname, '..', 'cloudfunctions', 'family', 'index.js'));
 const ingredientFn = require(path.join(__dirname, '..', 'cloudfunctions', 'ingredient', 'index.js'));
+const shelfFilter = require(path.join(
+  __dirname,
+  '..',
+  'cloudfunctions',
+  'recommend',
+  'shelf-filter.js',
+));
 
 /* ============================== 断言工具 ============================== */
 
@@ -125,6 +132,70 @@ const VALID_INPUT = {
   expireDate: null,
   remark: '',
 };
+
+/* ============================== Phase B：前端纯函数加载 ============================== */
+
+const os = require('os');
+const { execFileSync } = require('child_process');
+
+/**
+ * 前端 utils 是 TS，node 不能直接 require。
+ * 这里用项目自带的 tsc 把入口编译到系统临时目录，再加载产物，
+ * 从而对前端纯函数（临期计算、分类分组）做真实行为测试，
+ * 而不是只看源码里有没有关键字。
+ */
+function loadFrontendUtils() {
+  const root = path.join(__dirname, '..');
+  const outDir = path.join(os.tmpdir(), 'wte-verify-ingredient-lib-' + process.pid);
+  fs.rmSync(outDir, { recursive: true, force: true });
+
+  // typescript 的 package.json 限制了 exports，不能直接 require.resolve('typescript/bin/tsc')，
+  // 改为从包目录拼出真实的 bin 入口（bin/tsc 是 JS 文件，可被 node 直接执行）
+  let tscBin = null;
+  try {
+    const tsPkg = require.resolve('typescript/package.json');
+    const candidate = path.join(path.dirname(tsPkg), 'bin', 'tsc');
+    if (fs.existsSync(candidate)) {
+      tscBin = candidate;
+    }
+  } catch (error) {
+    tscBin = null;
+  }
+
+  if (!tscBin) {
+    return { error: '找不到 typescript，无法编译前端模块' };
+  }
+
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        tscBin,
+        '--ignoreConfig',
+        path.join(root, 'miniprogram', 'utils', 'ingredient-group.ts'),
+        '--outDir',
+        outDir,
+        '--module',
+        'commonjs',
+        '--target',
+        'es2017',
+        '--skipLibCheck',
+        '--lib',
+        'es2017',
+      ],
+      { stdio: 'pipe' },
+    );
+  } catch (error) {
+    const detail = String((error.stdout || '') + (error.stderr || '')).slice(0, 500);
+    return { error: 'tsc 编译前端模块失败: ' + detail };
+  }
+
+  return {
+    outDir: outDir,
+    shelfLife: require(path.join(outDir, 'utils', 'shelf-life.js')),
+    ingredientGroup: require(path.join(outDir, 'utils', 'ingredient-group.js')),
+  };
+}
 
 /* ============================== 静态结构检查 ============================== */
 
@@ -258,15 +329,120 @@ function runStructureChecks() {
   check('kg → g 换算是 ×1000', /amount \* 1000/.test(unitsSource));
   check('个/袋/盒 缺 averageWeight 时不猜测换算', /averageWeight === null[\s\S]{0,200}return null/.test(unitsSource));
 
-  // 11. 新增食材不引入拍照 / OCR / 语音 / 临期 / 自动扣库存
+  // 11. 新增食材不引入拍照 / OCR / 语音 / 自动扣库存
   // 先剔除注释再扫描，否则「本阶段不做拍照识别」这类说明文字会被误判成已实现
+  // （Phase B 已实现临期计算，因此「临期」不再是禁止词）
   const stripComments = (text) =>
     text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, '');
   const codeText = stripComments(ingredientSource) + stripComments(pageSource);
-  const forbidden = /\bocr\b|chooseImage|chooseMedia|startRecord|getRecorderManager|临期|自动扣/i.test(
+  const forbidden = /\bocr\b|chooseImage|chooseMedia|startRecord|getRecorderManager|自动扣/i.test(
     codeText,
   );
-  check('未实现拍照 / OCR / 语音 / 临期 / 自动扣库存', forbidden === false);
+  check('未实现拍照 / OCR / 语音 / 自动扣库存', forbidden === false);
+
+  /* ---------- Phase B：保质期与分类折叠 ---------- */
+
+  // 12. Phase B 新增的两个前端纯函数模块
+  const shelfLifePath = path.join(root, 'miniprogram', 'utils', 'shelf-life.ts');
+  const groupPath = path.join(root, 'miniprogram', 'utils', 'ingredient-group.ts');
+  check('存在 utils/shelf-life.ts', fs.existsSync(shelfLifePath));
+  check('存在 utils/ingredient-group.ts', fs.existsSync(groupPath));
+
+  const shelfLifeSource = fs.existsSync(shelfLifePath) ? fs.readFileSync(shelfLifePath, 'utf8') : '';
+  check(
+    'SHELF_LIFE_WARNING_DAYS 默认为 3',
+    /SHELF_LIFE_WARNING_DAYS\s*=\s*3\b/.test(shelfLifeSource),
+  );
+  check(
+    'shelf-life 导出 getShelfLifeStatus / isExpired / daysUntil',
+    ['getShelfLifeStatus', 'isExpired', 'daysUntil'].every(
+      (name) => shelfLifeSource.indexOf('export function ' + name) !== -1,
+    ),
+  );
+  check(
+    'shelf-life 按 UTC 天数序号计算，避开时区偏移',
+    shelfLifeSource.indexOf('Date.UTC') !== -1,
+  );
+
+  // 13. 类型与白名单已带上新字段
+  const ingredientTypes = fs.readFileSync(
+    path.join(root, 'miniprogram', 'types', 'ingredient.ts'),
+    'utf8',
+  );
+  check('Ingredient 类型含 purchaseDate', ingredientTypes.indexOf('purchaseDate') !== -1);
+  check('Ingredient 类型含 shelfLifeDays', ingredientTypes.indexOf('shelfLifeDays') !== -1);
+  check(
+    '云函数白名单写入 purchaseDate / shelfLifeDays',
+    /purchaseDate:\s*parsed\.value\.purchaseDate/.test(ingredientSource) &&
+      /shelfLifeDays:\s*parsed\.value\.shelfLifeDays/.test(ingredientSource),
+  );
+  check(
+    '云函数支持由购买日 + 保质天数推导到期日',
+    /addDays\(purchaseDate,\s*shelfLifeDays\)/.test(ingredientSource),
+  );
+
+  // 14. 食材组件提供三个快捷操作
+  const itemComponentSource = fs.readFileSync(
+    path.join(root, 'miniprogram', 'components', 'ingredient-item', 'index.ts'),
+    'utf8',
+  );
+  check(
+    '食材组件提供 已用完 / 补货 / 查看做法 三个快捷操作',
+    ['onConsume', 'onRestock', 'onRecipes'].every(
+      (name) => itemComponentSource.indexOf(name) !== -1,
+    ),
+  );
+  const itemWxml = fs.readFileSync(
+    path.join(root, 'miniprogram', 'components', 'ingredient-item', 'index.wxml'),
+    'utf8',
+  );
+  check(
+    '食材组件展示临期 / 过期标识',
+    itemWxml.indexOf('ingredient__shelf--warning') !== -1 &&
+      itemWxml.indexOf('ingredient__shelf--expired') !== -1,
+  );
+
+  // 15. 食材页按分类折叠，并接上快捷操作
+  check(
+    '食材页渲染分类分组并支持折叠切换',
+    pageWxml.indexOf('wx:for="{{groups}}"') !== -1 &&
+      pageWxml.indexOf('onToggleCategory') !== -1 &&
+      pageWxml.indexOf('group.collapsed') !== -1,
+  );
+  check(
+    '食材页接上 restock / recipes 事件',
+    pageWxml.indexOf('bind:restock=') !== -1 && pageWxml.indexOf('bind:recipes=') !== -1,
+  );
+  check(
+    '食材页表单提供购买日期与保质天数输入',
+    pageWxml.indexOf('onPurchaseDateChange') !== -1 &&
+      pageWxml.indexOf('onShelfLifeInput') !== -1,
+  );
+  check(
+    '食材页用 buildCategoryGroups 构建分组',
+    pageSource.indexOf('buildCategoryGroups') !== -1,
+  );
+  check(
+    '食材页展示临期提醒条',
+    pageWxml.indexOf('shelf-alert') !== -1 && pageWxml.indexOf('warningCount') !== -1,
+  );
+
+  // 16. 推荐排除过期食材（Phase B3）
+  const shelfFilterPath = path.join(root, 'cloudfunctions', 'recommend', 'shelf-filter.js');
+  check('存在 recommend/shelf-filter.js', fs.existsSync(shelfFilterPath));
+  const recommendSource = fs.readFileSync(
+    path.join(root, 'cloudfunctions', 'recommend', 'index.js'),
+    'utf8',
+  );
+  check(
+    'recommend 复用 shelf-filter 的 filterExpired',
+    /require\(['"]\.\/shelf-filter['"]\)/.test(recommendSource) &&
+      recommendSource.indexOf('filterExpired(') !== -1,
+  );
+  check(
+    'recommend 在构建库存名单前过滤过期食材',
+    recommendSource.indexOf('filterExpired(allIngredients') !== -1,
+  );
 }
 
 /* ============================== 行为测试 ============================== */
@@ -601,8 +777,10 @@ async function runBehaviorTests() {
       'expireDate',
       'familyId',
       'name',
+      'purchaseDate',
       'quantity',
       'remark',
+      'shelfLifeDays',
       'standardName',
       'unit',
       'updatedAt',
@@ -752,6 +930,373 @@ async function runBehaviorTests() {
     });
     checkEqual('普通成员可以添加食材', addByB.success, true);
     checkEqual('添加后家庭库存为 2', ingredientsOf(a.familyId).length, 2);
+  }
+
+  /* ---------- Phase B：购买日 + 保质天数自动推导到期日 ---------- */
+  section('Phase B：保质期字段与自动到期日');
+  resetStore();
+  {
+    const a = await setupFamily('shelf');
+
+    const auto = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '牛奶',
+        quantity: 2,
+        unit: '盒',
+        category: 'dairy',
+        purchaseDate: '2026-01-01',
+        shelfLifeDays: 7,
+      },
+    });
+    checkEqual('购买日 + 保质天数创建成功', auto.success, true);
+    checkEqual('自动推导到期日为 2026-01-08', auto.data.expireDate, '2026-01-08');
+    checkEqual('购买日已落库', auto.data.purchaseDate, '2026-01-01');
+    checkEqual('保质天数已落库', auto.data.shelfLifeDays, 7);
+
+    // 跨月
+    const crossMonth = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '豆腐',
+        quantity: 1,
+        unit: '盒',
+        category: 'soy_product',
+        purchaseDate: '2026-01-28',
+        shelfLifeDays: 5,
+      },
+    });
+    checkEqual('跨月推导 2026-02-02', crossMonth.data.expireDate, '2026-02-02');
+
+    // 跨年
+    const crossYear = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '速冻饺子',
+        quantity: 1,
+        unit: '袋',
+        category: 'staple',
+        purchaseDate: '2026-12-30',
+        shelfLifeDays: 5,
+      },
+    });
+    checkEqual('跨年推导 2027-01-04', crossYear.data.expireDate, '2027-01-04');
+
+    // 保质天数 0 表示当天到期，不能被当成「未填」
+    const sameDay = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '鲜面条',
+        quantity: 1,
+        unit: '袋',
+        category: 'staple',
+        purchaseDate: '2026-03-05',
+        shelfLifeDays: 0,
+      },
+    });
+    checkEqual('保质 0 天 → 当天到期', sameDay.data.expireDate, '2026-03-05');
+    checkEqual('保质 0 天已落库（非 null）', sameDay.data.shelfLifeDays, 0);
+
+    // 显式到期日优先于自动推导
+    const explicit = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '酸奶',
+        quantity: 4,
+        unit: '盒',
+        category: 'dairy',
+        purchaseDate: '2026-01-01',
+        shelfLifeDays: 7,
+        expireDate: '2026-02-01',
+      },
+    });
+    checkEqual('显式到期日优先', explicit.data.expireDate, '2026-02-01');
+
+    // 只给购买日、不给天数：无法推导，到期日应为空
+    const noDays = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '苹果',
+        quantity: 3,
+        unit: '个',
+        category: 'fruit',
+        purchaseDate: '2026-01-01',
+      },
+    });
+    checkEqual('只给购买日时到期日为空', noDays.data.expireDate, null);
+    checkEqual('只给购买日时保质天数为空', noDays.data.shelfLifeDays, null);
+
+    // 完全不给：保持旧行为
+    const legacy = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: VALID_INPUT,
+    });
+    checkEqual('不填保质字段时到期日为空', legacy.data.expireDate, null);
+    checkEqual('不填保质字段时购买日为空', legacy.data.purchaseDate, null);
+  }
+
+  /* ---------- Phase B：非法保质字段被拒绝 ---------- */
+  section('Phase B：非法保质字段校验');
+  resetStore();
+  {
+    const a = await setupFamily('shelfbad');
+
+    const negative = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+        purchaseDate: '2026-01-01',
+        shelfLifeDays: -1,
+      },
+    });
+    checkEqual('负数保质天数被拒绝', negative.success, false);
+    checkEqual('负数保质天数错误码', negative.code, 'INVALID_PARAMS');
+
+    const fractional = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+        shelfLifeDays: 1.5,
+      },
+    });
+    checkEqual('非整数保质天数被拒绝', fractional.success, false);
+
+    const tooLarge = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+        shelfLifeDays: 3651,
+      },
+    });
+    checkEqual('超大保质天数被拒绝', tooLarge.success, false);
+
+    const badDate = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+        purchaseDate: '2026-02-30',
+      },
+    });
+    checkEqual('不存在的购买日被拒绝', badDate.success, false);
+
+    checkEqual('非法入参未落库', ingredientsOf(a.familyId).length, 0);
+  }
+
+  /* ---------- Phase B：修改时同样推导到期日 ---------- */
+  section('Phase B：修改食材时重算到期日');
+  resetStore();
+  {
+    const a = await setupFamily('shelfupdate');
+
+    const created = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+        purchaseDate: '2026-01-01',
+        shelfLifeDays: 3,
+      },
+    });
+    checkEqual('初始到期日 2026-01-04', created.data.expireDate, '2026-01-04');
+
+    const updated = await callIngredient(a.openidA, 'updateIngredient', {
+      familyId: a.familyId,
+      id: created.data._id,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+        purchaseDate: '2026-01-01',
+        shelfLifeDays: 10,
+      },
+    });
+    checkEqual('修改后到期日重算为 2026-01-11', updated.data.expireDate, '2026-01-11');
+
+    const cleared = await callIngredient(a.openidA, 'updateIngredient', {
+      familyId: a.familyId,
+      id: created.data._id,
+      input: {
+        name: '牛奶',
+        quantity: 1,
+        unit: '盒',
+        category: 'dairy',
+      },
+    });
+    checkEqual('清空保质字段后到期日为空', cleared.data.expireDate, null);
+  }
+
+  /* ---------- Phase B：前端纯函数（临期计算 + 分类分组） ---------- */
+  section('Phase B：前端临期计算与分类分组纯函数');
+  {
+    const lib = loadFrontendUtils();
+
+    if (lib.error) {
+      check('前端纯函数模块可编译加载', false, lib.error);
+    } else {
+      check('前端纯函数模块可编译加载', true);
+
+      const shelf = lib.shelfLife;
+      const group = lib.ingredientGroup;
+      const today = new Date(2026, 0, 10, 12, 0, 0); // 本地时间 2026-01-10
+
+      checkEqual('SHELF_LIFE_WARNING_DAYS = 3', shelf.SHELF_LIFE_WARNING_DAYS, 3);
+      checkEqual('daysUntil 明天 = 1', shelf.daysUntil('2026-01-11', today), 1);
+      checkEqual('daysUntil 今天 = 0', shelf.daysUntil('2026-01-10', today), 0);
+      checkEqual('daysUntil 昨天 = -1', shelf.daysUntil('2026-01-09', today), -1);
+      checkEqual('daysUntil 跨月 = 22', shelf.daysUntil('2026-02-01', today), 22);
+
+      checkEqual('昨天到期 → expired', shelf.getShelfLifeStatus('2026-01-09', today).status, 'expired');
+      checkEqual('过期文案带天数', shelf.getShelfLifeStatus('2026-01-09', today).label, '已过期 1 天');
+      checkEqual('今天到期 → warning', shelf.getShelfLifeStatus('2026-01-10', today).status, 'warning');
+      checkEqual('今天到期文案', shelf.getShelfLifeStatus('2026-01-10', today).label, '今天到期');
+      checkEqual('3 天后到期 → warning', shelf.getShelfLifeStatus('2026-01-13', today).status, 'warning');
+      checkEqual('4 天后到期 → fresh', shelf.getShelfLifeStatus('2026-01-14', today).status, 'fresh');
+      checkEqual('无到期日 → unknown', shelf.getShelfLifeStatus(null, today).status, 'unknown');
+      checkEqual('非法日期 → unknown', shelf.getShelfLifeStatus('2026-02-30', today).status, 'unknown');
+      checkEqual('isExpired 昨天 = true', shelf.isExpired('2026-01-09', today), true);
+      checkEqual('isExpired 今天 = false', shelf.isExpired('2026-01-10', today), false);
+      checkEqual('isExpired 空值 = false', shelf.isExpired(null, today), false);
+
+      const sample = [
+        {
+          _id: 'g1',
+          name: '西红柿',
+          standardName: '番茄',
+          quantity: 3,
+          unit: '个',
+          category: 'vegetable',
+          expireDate: '2026-01-20',
+          purchaseDate: '2026-01-01',
+          shelfLifeDays: 19,
+          remark: '',
+        },
+        {
+          _id: 'g2',
+          name: '菠菜',
+          standardName: '菠菜',
+          quantity: 1,
+          unit: '袋',
+          category: 'vegetable',
+          expireDate: '2026-01-09',
+          purchaseDate: null,
+          shelfLifeDays: null,
+          remark: '',
+        },
+        {
+          _id: 'g3',
+          name: '鸡蛋',
+          standardName: '鸡蛋',
+          quantity: 6,
+          unit: '个',
+          category: 'meat_egg',
+          expireDate: null,
+          purchaseDate: null,
+          shelfLifeDays: null,
+          remark: '',
+        },
+        {
+          _id: 'g4',
+          name: '未知物',
+          standardName: '未知物',
+          quantity: 1,
+          unit: 'g',
+          category: 'not_a_category',
+          expireDate: '2026-01-11',
+          purchaseDate: null,
+          shelfLifeDays: null,
+          remark: '',
+        },
+      ];
+
+      const groups = group.buildCategoryGroups(sample, {}, today);
+      checkEqual('分组数量 = 3（蔬菜/肉蛋/其他）', groups.length, 3);
+      checkEqual('分组顺序第 1 个是蔬菜', groups[0].code, 'vegetable');
+      checkEqual('未知分类归入其他', groups[2].code, 'other');
+      checkEqual('蔬菜组含 2 项', groups[0].count, 2);
+      checkEqual('蔬菜组临期+过期计数 = 1', groups[0].warningCount, 1);
+      checkEqual('临期组在组内排最前', groups[0].items[0]._id, 'g2');
+      checkEqual('过期项被标记', groups[0].items[0].isExpired, true);
+      checkEqual('其他组含 1 项', groups[2].count, 1);
+      checkEqual('其他组 1 天内到期 → 临期', groups[2].items[0].isWarning, true);
+
+      const collapsed = group.buildCategoryGroups(sample, { vegetable: true }, today);
+      checkEqual('折叠状态透传到分组', collapsed[0].collapsed, true);
+      checkEqual('未指定分类默认展开', collapsed[1].collapsed, false);
+
+      const view = group.toIngredientView(sample[0], today);
+      checkEqual('别名文案带原始名', view.aliasText, '（西红柿）');
+      checkEqual('数量文案', view.quantityText, '3 个');
+      checkEqual('新鲜食材不标临期', view.isWarning, false);
+
+      const sorted = group.sortByShelfLife([
+        group.toIngredientView(sample[2], today), // unknown
+        group.toIngredientView(sample[0], today), // fresh
+        group.toIngredientView(sample[1], today), // expired
+      ]);
+      checkEqual('排序：过期最前', sorted[0]._id, 'g2');
+      checkEqual('排序：新鲜居中', sorted[1]._id, 'g1');
+      checkEqual('排序：无到期日最后', sorted[2]._id, 'g3');
+    }
+  }
+
+  /* ---------- Phase B：推荐排除过期食材 ---------- */
+  section('Phase B：推荐侧过期食材过滤');
+  {
+    checkEqual(
+      '北京时间：UTC 00:30 已是当天',
+      shelfFilter.todayInBeijing(Date.UTC(2026, 0, 10, 0, 30, 0)),
+      '2026-01-10',
+    );
+    checkEqual(
+      '北京时间：UTC 前一天 17:00 已跨日',
+      shelfFilter.todayInBeijing(Date.UTC(2026, 0, 9, 17, 0, 0)),
+      '2026-01-10',
+    );
+    checkEqual(
+      '北京时间：UTC 前一天 15:59 仍属前一天',
+      shelfFilter.todayInBeijing(Date.UTC(2026, 0, 9, 15, 59, 0)),
+      '2026-01-09',
+    );
+
+    const today = '2026-01-10';
+    checkEqual('昨天到期 → 已过期', shelfFilter.isExpiredIngredient({ expireDate: '2026-01-09' }, today), true);
+    checkEqual('今天到期 → 未过期', shelfFilter.isExpiredIngredient({ expireDate: '2026-01-10' }, today), false);
+    checkEqual('明天到期 → 未过期', shelfFilter.isExpiredIngredient({ expireDate: '2026-01-11' }, today), false);
+    checkEqual('无到期日 → 未过期', shelfFilter.isExpiredIngredient({ expireDate: null }, today), false);
+
+    const filtered = shelfFilter.filterExpired(
+      [
+        { standardName: '番茄', expireDate: '2026-01-20' },
+        { standardName: '菠菜', expireDate: '2026-01-01' },
+        { standardName: '鸡蛋', expireDate: null },
+        { standardName: '牛奶', expireDate: '2026-01-10' },
+      ],
+      today,
+    );
+    checkEqual('过滤后保留 3 项', filtered.kept.length, 3);
+    checkEqual('被排除 1 项', filtered.skipped, 1);
+    checkEqual(
+      '过期食材不在保留名单中',
+      filtered.kept.map((item) => item.standardName).indexOf('菠菜'),
+      -1,
+    );
+    checkEqual('当天到期仍参与推荐', filtered.kept[2].standardName, '牛奶');
+    checkEqual('空输入不报错', shelfFilter.filterExpired(null, today).kept.length, 0);
   }
 }
 

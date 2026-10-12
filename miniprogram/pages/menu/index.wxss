@@ -135,9 +135,291 @@
   color: var(--wte-text-weak);
 }
 
+.history-card__kcal {
+  color: #ff7a45;
+  font-weight: 500;
+}
+
 .load-more {
   text-align: center;
   padding: 28rpx;
   font-size: 24rpx;
   color: var(--wte-text-weak);
+}
+
+/* ================================================================ */
+/*                           日  历                                  */
+/* ================================================================ */
+
+/* 导航 */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4rpx 0 20rpx;
+}
+
+.cal-nav__left,
+.cal-nav__right {
+  width: 72rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--wte-card);
+}
+
+.cal-nav__arrow {
+  font-size: 24rpx;
+  color: #9a8c7d;
+}
+
+.cal-nav__center {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+/* 模式切换 */
+.cal-modes {
+  display: flex;
+  gap: 8rpx;
+  margin-bottom: 24rpx;
+}
+
+.cal-modes__item {
+  padding: 10rpx 32rpx;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+  background: #f2eae2;
+}
+
+.cal-modes__item--active {
+  background: #ff7a45;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 星期行 */
+.cal.weekdays {
+  display: flex;
+  margin-bottom: 8rpx;
+}
+
+.cal__weekday {
+  flex: 1;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  padding: 10rpx 0;
+}
+
+/* 月网格 */
+.cal.month-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.cal-cell {
+  width: calc(100% / 7);
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-radius: 12rpx;
+}
+
+.cal-cell--dim {
+  opacity: 0.3;
+}
+
+.cal-cell--today {
+  background: #fff3e8;
+}
+
+.cal-cell--has-menu {
+  font-weight: 600;
+}
+
+.cal-cell__day {
+  font-size: 28rpx;
+  color: var(--wte-text);
+}
+
+.cal-cell--today .cal-cell__day {
+  color: #ff7a45;
+  font-weight: 700;
+}
+
+.cal-cell__dots {
+  display: flex;
+  gap: 4rpx;
+  margin-top: 4rpx;
+}
+
+.cal-cell__dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #ff7a45;
+}
+
+.cal-cell__dot--warn {
+  background: #f5a623;
+}
+
+/* 周视图 */
+.week-strip {
+  display: flex;
+  gap: 8rpx;
+}
+
+.week-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 8rpx;
+  border-radius: 16rpx;
+  background: var(--wte-card);
+}
+
+.week-day--today {
+  background: #fff3e8;
+  border: 2rpx solid #ff7a45;
+}
+
+.week-day__name {
+  font-size: 22rpx;
+  color: var(--wte-text-weak);
+}
+
+.week-day__num {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+  margin: 6rpx 0;
+}
+
+.week-day--today .week-day__num {
+  color: #ff7a45;
+}
+
+.week-day__kcal {
+  font-size: 20rpx;
+  color: #ff7a45;
+  margin-top: 4rpx;
+  text-align: center;
+}
+
+.week-day__dot {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: var(--wte-text-weak);
+  background: #f2eae2;
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+}
+
+.week-day__empty {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #d4c5b5;
+}
+
+/* 日视图弹层 */
+.cal-day-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.cal-day-panel {
+  width: 100%;
+  max-height: 70vh;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  overflow-y: auto;
+  padding: 32rpx 32rpx calc(env(safe-area-inset-bottom) + 32rpx);
+}
+
+.cal-day-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.cal-day-panel__date {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.cal-day-panel__close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f2eae2;
+  font-size: 28rpx;
+  color: var(--wte-text-weak);
+}
+
+.cal-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.cal-day-item {
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: #faf6f0;
+}
+
+.cal-day-item--hover {
+  background: #fff3e8;
+}
+
+.cal-day-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cal-day-item__type {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.cal-day-item__count {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.cal-day-item__kcal {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: #ff7a45;
+  font-weight: 500;
+}
+
+.cal-day-item__status {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #d4c5b5;
 }

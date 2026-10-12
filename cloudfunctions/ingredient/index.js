@@ -10,11 +10,16 @@
  *   2. 所有操作都必须经 requireFamilyMember 复核，前端传入的 familyId 只作为
  *      「想操作哪个家庭」的意图，绝不作为权限依据；
  *   3. 修改 / 删除前必须确认该食材确实属于当前家庭，杜绝跨家庭越权；
- *   4. 只允许写白名单字段（name / quantity / unit / category / expireDate / remark），
- *      standardName / createdBy / familyId / 时间戳一律由服务端生成；
+ *   4. 只允许写白名单字段（name / quantity / unit / category / expireDate /
+ *      purchaseDate / shelfLifeDays / remark），standardName / createdBy / familyId /
+ *      时间戳一律由服务端生成；
  *   5. LLM API Key 只存在于云函数环境变量中，绝不下发到小程序前端。
  *
- * 本阶段刻意不做的事：拍照识别、OCR、语音、临期算法、自动扣库存、复杂单位、库存统计。
+ * Phase B 补充：
+ *   - 新增 purchaseDate（购买日）与 shelfLifeDays（保质天数）；
+ *   - 未显式填写 expireDate 时，由 purchaseDate + shelfLifeDays 自动推导到期日；
+ *   - 临期 / 过期判定属于展示层逻辑，放到前端与 recommend 云函数，
+ *     本函数只负责字段落库与到期日推导。
  */
 const cloud = require('wx-server-sdk');
 
@@ -40,6 +45,8 @@ const DB_NOT_READY_MESSAGE =
 const INGREDIENT_NAME_MAX_LENGTH = 20;
 const INGREDIENT_REMARK_MAX_LENGTH = 50;
 const INGREDIENT_QUANTITY_MAX = 9999;
+/** 保质天数上限（10 年），防止误填导致到期日溢出 */
+const SHELF_LIFE_DAYS_MAX = 3650;
 /** 一次最多返回的食材条数，第一阶段不做分页 */
 const INGREDIENT_LIST_LIMIT = 200;
 
@@ -157,6 +164,13 @@ function isRealDateString(text) {
     date.getUTCMonth() === month - 1 &&
     date.getUTCDate() === day
   );
+}
+
+/** YYYY-MM-DD 加 n 天，返回 YYYY-MM-DD（全部按 UTC 计算，不受时区影响） */
+function addDays(dateText, days) {
+  const parts = dateText.split('-');
+  const base = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  return new Date(base + days * 86400000).toISOString().slice(0, 10);
 }
 
 /* ------------------------------ 查询工具 ------------------------------ */
@@ -319,11 +333,36 @@ function buildIngredientPayload(input) {
     return { error: '请选择食材分类' };
   }
 
+  let purchaseDate = normalizeText(source.purchaseDate);
+  if (purchaseDate) {
+    if (!isRealDateString(purchaseDate)) {
+      return { error: '购买日期格式不正确，应为 YYYY-MM-DD' };
+    }
+  } else {
+    purchaseDate = null;
+  }
+
+  let shelfLifeDays = null;
+  const rawShelfLife = source.shelfLifeDays;
+  if (rawShelfLife !== undefined && rawShelfLife !== null && rawShelfLife !== '') {
+    const days = typeof rawShelfLife === 'number' ? rawShelfLife : Number(rawShelfLife);
+    if (!Number.isInteger(days) || days < 0) {
+      return { error: '保质天数需为不小于 0 的整数' };
+    }
+    if (days > SHELF_LIFE_DAYS_MAX) {
+      return { error: '保质天数不能超过 ' + SHELF_LIFE_DAYS_MAX + ' 天' };
+    }
+    shelfLifeDays = days;
+  }
+
+  // 到期日优先级：显式填写的 expireDate > purchaseDate + shelfLifeDays 自动推导 > 空
   let expireDate = normalizeText(source.expireDate);
   if (expireDate) {
     if (!isRealDateString(expireDate)) {
       return { error: '保质期格式不正确，应为 YYYY-MM-DD' };
     }
+  } else if (purchaseDate && shelfLifeDays !== null) {
+    expireDate = addDays(purchaseDate, shelfLifeDays);
   } else {
     expireDate = null;
   }
@@ -340,6 +379,8 @@ function buildIngredientPayload(input) {
       unit: unit,
       category: category,
       expireDate: expireDate,
+      purchaseDate: purchaseDate,
+      shelfLifeDays: shelfLifeDays,
       remark: remark,
     },
   };
@@ -357,6 +398,8 @@ function toIngredientDTO(doc) {
     unit: doc.unit,
     category: doc.category,
     expireDate: doc.expireDate || null,
+    purchaseDate: doc.purchaseDate || null,
+    shelfLifeDays: typeof doc.shelfLifeDays === 'number' ? doc.shelfLifeDays : null,
     remark: doc.remark || '',
     createdBy: doc.createdBy,
     createdAt: toIsoString(doc.createdAt),
@@ -410,6 +453,8 @@ async function handleCreateIngredient(event, wxContext, requestId, logContext) {
     unit: parsed.value.unit,
     category: parsed.value.category,
     expireDate: parsed.value.expireDate,
+    purchaseDate: parsed.value.purchaseDate,
+    shelfLifeDays: parsed.value.shelfLifeDays,
     remark: parsed.value.remark,
     // createdBy 由服务端决定，客户端传什么都不看
     createdBy: guard.user._id,
@@ -469,6 +514,8 @@ async function handleUpdateIngredient(event, wxContext, requestId, logContext) {
         unit: parsed.value.unit,
         category: parsed.value.category,
         expireDate: parsed.value.expireDate,
+        purchaseDate: parsed.value.purchaseDate,
+        shelfLifeDays: parsed.value.shelfLifeDays,
         remark: parsed.value.remark,
         updatedAt: now,
       },

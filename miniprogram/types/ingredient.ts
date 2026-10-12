@@ -29,6 +29,10 @@ export interface Ingredient {
   category: IngredientCategoryCode;
   /** 可选保质期，格式 YYYY-MM-DD，未填写为 null */
   expireDate: string | null;
+  /** Phase B：购买日期，格式 YYYY-MM-DD，未填写为 null */
+  purchaseDate: string | null;
+  /** Phase B：保质天数；与 purchaseDate 同时存在时可自动推导 expireDate */
+  shelfLifeDays: number | null;
   remark: string;
   createdBy: string;
   createdAt: string;
@@ -41,7 +45,12 @@ export interface IngredientInput {
   quantity: number;
   unit: UnitCode;
   category: IngredientCategoryCode;
+  /** 显式到期日；留空时由 purchaseDate + shelfLifeDays 自动推导 */
   expireDate?: string | null;
+  /** Phase B：购买日期 */
+  purchaseDate?: string | null;
+  /** Phase B：保质天数 */
+  shelfLifeDays?: number | null;
   remark?: string;
 }
 

@@ -2,7 +2,7 @@
   <view class="head">
     <view>
       <view class="page-header__title">我的食材</view>
-      <view class="page-header__subtitle" wx:if="{{hasFamily}}">共 {{ingredients.length}} 种食材</view>
+      <view class="page-header__subtitle" wx:if="{{hasFamily}}">共 {{ingredientCount}} 种食材</view>
     </view>
     <view class="head__actions" wx:if="{{hasFamily}}">
       <view class="head__add" bindtap="onOpenCreate">+ 添加食材</view>
@@ -34,11 +34,11 @@
     </view>
   </block>
 
-  <loading-state wx:elif="{{loading && ingredients.length === 0}}" text="正在加载食材..." />
+  <loading-state wx:elif="{{loading && ingredientCount === 0}}" text="正在加载食材..." />
 
   <!-- 列表加载失败：给明确提示与重试，不白屏 -->
   <error-state
-    wx:elif="{{error && ingredients.length === 0}}"
+    wx:elif="{{error && ingredientCount === 0}}"
     title="食材加载失败"
     description="{{error}}"
     bind:retry="onRetry"
@@ -47,17 +47,42 @@
   <block wx:else>
     <view class="error-tip" wx:if="{{error}}">{{error}}</view>
 
-    <view class="card" wx:if="{{ingredients.length > 0}}">
-      <ingredient-item
-        wx:for="{{ingredients}}"
-        wx:key="_id"
-        item="{{item}}"
-        index="{{index}}"
-        categoryLabel="{{item.categoryLabel}}"
-        bind:edit="onEditIngredient"
-        bind:delete="onDeleteIngredient"
-      />
+    <!-- Phase B：临期 / 过期提醒条 -->
+    <view class="shelf-alert" wx:if="{{warningCount > 0}}">
+      <text class="shelf-alert__icon">⏰</text>
+      <text>有 {{warningCount}} 种食材临期或已过期（{{warningDays}} 天内到期算临期），建议优先使用</text>
     </view>
+
+    <block wx:if="{{ingredientCount > 0}}">
+      <view class="group" wx:for="{{groups}}" wx:key="code" wx:for-item="group">
+        <view
+          class="group__head"
+          data-code="{{group.code}}"
+          bindtap="onToggleCategory"
+          hover-class="group__head--hover"
+        >
+          <text class="group__emoji">{{group.emoji}}</text>
+          <text class="group__label">{{group.label}}</text>
+          <text class="group__count">{{group.count}}</text>
+          <text class="group__warn" wx:if="{{group.hasWarning}}">{{group.warningCount}} 临期</text>
+          <text class="group__arrow">{{group.collapsed ? '▸' : '▾'}}</text>
+        </view>
+
+        <view class="card" wx:if="{{!group.collapsed}}">
+          <ingredient-item
+            wx:for="{{group.items}}"
+            wx:key="_id"
+            item="{{item}}"
+            index="{{index}}"
+            categoryLabel="{{item.categoryLabel}}"
+            bind:edit="onEditIngredient"
+            bind:delete="onConsumeIngredient"
+            bind:restock="onRestockIngredient"
+            bind:recipes="onViewRecipes"
+          />
+        </view>
+      </view>
+    </block>
 
     <empty-state
       wx:else
@@ -124,7 +149,35 @@
     </view>
 
     <view class="field">
-      <view class="field__label">保质期（可选）</view>
+      <view class="field__label">购买日期（可选）</view>
+      <view class="field__row">
+        <picker
+          class="field__grow"
+          mode="date"
+          value="{{formPurchaseDate}}"
+          bindchange="onPurchaseDateChange"
+        >
+          <view class="field__picker-value field__picker-value--block">
+            {{formPurchaseDate || '未设置'}}
+          </view>
+        </picker>
+        <view class="field__clear" wx:if="{{formPurchaseDate}}" catchtap="onClearPurchaseDate">清除</view>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="field__label">保质天数（可选）</view>
+      <input
+        class="field__input"
+        type="number"
+        value="{{formShelfLifeDays}}"
+        placeholder="例如：7"
+        bindinput="onShelfLifeInput"
+      />
+    </view>
+
+    <view class="field">
+      <view class="field__label">到期日（可选）</view>
       <view class="field__row">
         <picker
           class="field__grow"
@@ -138,6 +191,8 @@
         </picker>
         <view class="field__clear" wx:if="{{formExpireDate}}" catchtap="onClearExpire">清除</view>
       </view>
+      <view class="field__hint" wx:if="{{expireHint}}">{{expireHint}}</view>
+      <view class="field__hint" wx:elif="{{!formExpireDate}}">留空时按「购买日期 + 保质天数」自动计算</view>
     </view>
 
     <view class="field">

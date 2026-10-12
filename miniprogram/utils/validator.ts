@@ -105,6 +105,21 @@ export function validateIngredientInput(input: Partial<IngredientInput>): Valida
   if (input.expireDate !== undefined && input.expireDate !== null && !isIsoDateString(input.expireDate)) {
     return fail('保质期格式不正确');
   }
+  if (input.purchaseDate !== undefined && input.purchaseDate !== null && !isIsoDateString(input.purchaseDate)) {
+    return fail('购买日期格式不正确');
+  }
+  const shelfLifeDays = input.shelfLifeDays;
+  if (shelfLifeDays !== undefined && shelfLifeDays !== null) {
+    if (typeof shelfLifeDays !== 'number' || !Number.isInteger(shelfLifeDays)) {
+      return fail('保质天数需为整数');
+    }
+    if (shelfLifeDays < 0) {
+      return fail('保质天数不能为负数');
+    }
+    if (shelfLifeDays > 3650) {
+      return fail('保质天数不能超过 3650 天');
+    }
+  }
   if (input.remark !== undefined && typeof input.remark !== 'string') {
     return fail('备注格式不正确');
   }

@@ -424,7 +424,8 @@ async function handleGenerateCookingSteps(event, wxContext) {
     const msg = {
       'AI_AUTH_FAILED': '模型认证失败',
       'AI_CONNECTION_FAILED': '无法连接模型',
-      'AI_TIMEOUT': '模型响应超时',
+      'AI_TIMEOUT': '模型响应超时。请稍后重试；若持续出现，请在「模型 API 设置」中改用响应更快的模型',
+      'AI_EMPTY_RESPONSE': '模型没有返回有效内容，请检查该模型是否兼容 OpenAI 对话接口',
       'AI_REQUEST_FAILED': '请求失败',
       'DECRYPT_FAILED': '密钥解密失败',
     };

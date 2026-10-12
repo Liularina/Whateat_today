@@ -23,6 +23,10 @@
     {
       "tool": "Cmd(if *)",
       "decision": "allow"
+    },
+    {
+      "tool": "Read",
+      "decision": "allow"
     }
   ]
 }

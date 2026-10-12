@@ -27,8 +27,12 @@ const { URL } = require('url');
 
 /* ============================== 配置常量 ============================== */
 
-/** 模型调用超时（毫秒）：build + connect + response */
-const AI_CALL_TIMEOUT_MS = 45000;
+/**
+ * 模型调用超时（毫秒）。
+ * 注意：微信云函数执行时长上限为 60 秒，这里必须留出余量（DB 读写 + 组包返回），
+ * 不能贴着 60 秒设置，否则云函数会先被平台终止，用户看到的是网络错误而不是超时提示。
+ */
+const AI_CALL_TIMEOUT_MS = 50000;
 
 /** 连接测试专用超时（毫秒），比业务调用更短 */
 const AI_TEST_TIMEOUT_MS = 15000;
@@ -38,6 +42,17 @@ const MAX_RESPONSE_BYTES = 512 * 1024;
 
 /** Chat Completions 路径后缀 */
 const CHAT_COMPLETIONS_PATH = '/chat/completions';
+
+/**
+ * 是否在请求体中关闭「思考模式」（enable_thinking: false）。
+ *
+ * 思考型模型（Qwen3 系列等）会先输出大段推理内容再给出正文，这些内容同样消耗
+ * token 和生成时间，在云函数 60 秒上限下极易超时。本项目提示词已把输出格式
+ * 约束为纯 JSON，不需要模型自行展开推理。
+ *
+ * 置为 false 即可恢复原行为；服务商若不支持该字段，客户端会自动去掉并重试一次。
+ */
+const DISABLE_THINKING = true;
 
 /** 环境变量：AES-256-GCM 加密密钥（64 位 hex → 32 字节） */
 const ENV_ENCRYPTION_KEY = 'USER_API_KEY_ENCRYPTION_SECRET';
@@ -445,10 +460,29 @@ async function chatCompletion(aiConfig, messages, options = {}) {
     body.response_format = response_format;
   }
 
-  // 4. 发送请求
-  const responseText = await chatCompletionsRequest(url, apiKey, body, timeoutMs);
+  // 4. 关闭思考模式：思考型模型先输出推理再给正文，在云函数 60 秒上限内极易超时。
+  //    chat_template_kwargs 是 vLLM 系服务的扩展字段，部分服务商可能不认。
+  if (DISABLE_THINKING) {
+    body.chat_template_kwargs = { enable_thinking: false };
+  }
 
-  // 5. 解析响应
+  // 5. 发送请求
+  let responseText;
+  try {
+    responseText = await chatCompletionsRequest(url, apiKey, body, timeoutMs);
+  } catch (e) {
+    // 兼容回退：服务商若不支持 enable_thinking 会直接返回 400，
+    // 去掉该字段重试一次，避免一个可选优化把整个功能打断。
+    if (e && e.statusCode === 400 && body.chat_template_kwargs) {
+      const fallbackBody = Object.assign({}, body);
+      delete fallbackBody.chat_template_kwargs;
+      responseText = await chatCompletionsRequest(url, apiKey, fallbackBody, timeoutMs);
+    } else {
+      throw e;
+    }
+  }
+
+  // 6. 解析响应
   let parsed;
   try {
     parsed = JSON.parse(responseText);
@@ -460,12 +494,15 @@ async function chatCompletion(aiConfig, messages, options = {}) {
   }
 
   // 兼容多种响应格式
+  const choice = parsed.choices && parsed.choices[0];
   const content =
-    (parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content) ||
-    (parsed.choices && parsed.choices[0] && parsed.choices[0].text) ||
+    (choice && choice.message && choice.message.content) ||
+    (choice && choice.text) ||
     '';
 
-  if (!content && content !== '') {
+  if (!content) {
+    // 正文为空时明确报错。原判断 `!content && content !== ''` 恒为 false，
+    // 会把空响应静默传给上层，上层只能看到「格式不正确」，排查不到真正原因。
     throw Object.assign(
       new Error('模型未返回有效内容'),
       { code: 'AI_EMPTY_RESPONSE' },

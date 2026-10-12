@@ -31,6 +31,9 @@ const {
   AI_CALL_TIMEOUT_MS,
 } = require('./openai-compatible-client');
 
+const { BUILTIN_NUTRITION_FACTS } = require('./nutrition-data');
+const { calculateNutrition } = require('./nutrition-core');
+
 /* ============================== 统一响应 ============================== */
 
 function ok(data) {
@@ -479,7 +482,8 @@ async function handleReplaceMenuItem(event, wxContext) {
       'AI_AUTH_FAILED': '模型认证失败，请检查 API 配置',
       'AI_CONNECTION_FAILED': '无法连接到模型服务',
       'AI_NOT_FOUND': '模型不存在，请检查模型名称',
-      'AI_TIMEOUT': '模型响应超时',
+      'AI_TIMEOUT': '模型响应超时。请稍后重试；若持续出现，请在「模型 API 设置」中改用响应更快的模型',
+      'AI_EMPTY_RESPONSE': '模型没有返回有效内容，请检查该模型是否兼容 OpenAI 对话接口',
       'AI_REQUEST_FAILED': '模型请求失败',
       'DECRYPT_FAILED': '密钥解密失败',
     };
@@ -652,6 +656,40 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
   });
 }
 
+/* ============================== 营养事实加载（Phase A1） ============================== */
+
+/**
+ * 单次云函数调用内的营养数据缓存。
+ * 先以内置基础数据打底，数据库中的同名记录覆盖内置项；
+ * 集合缺失或读取失败时不阻塞确认，直接退回内置表。
+ */
+const factsCol = db.collection('nutrition_facts');
+let nutritionFactMapCache = null;
+
+async function loadNutritionFactMap() {
+  if (nutritionFactMapCache) return nutritionFactMapCache;
+
+  const map = {};
+  for (const row of BUILTIN_NUTRITION_FACTS) {
+    map[row.standardName] = row;
+  }
+
+  try {
+    const res = await factsCol.limit(1000).get();
+    for (const row of res.data || []) {
+      const name = (row.standardName || '').trim();
+      if (name) map[name] = row;
+    }
+  } catch (e) {
+    if (!isCollectionMissing(e)) {
+      console.error('[menu] 读取 nutrition_facts 失败，已退回内置基础数据', e);
+    }
+  }
+
+  nutritionFactMapCache = map;
+  return map;
+}
+
 /* ============================== confirmMenu ============================== */
 
 async function handleConfirmMenu(event, wxContext) {
@@ -687,10 +725,49 @@ async function handleConfirmMenu(event, wxContext) {
     return fail('INVALID_ITEMS', '以下菜品已失效：' + invalidIds.join('、'));
   }
 
+  // ---- 营养快照：确认时计算每道菜的热量 ----
+  const factMap = await loadNutritionFactMap();
+  let overallNutritionStatus = 'complete';
+
+  const itemsWithNutrition = items.map((item) => {
+    const scale = item.servings > 0 ? menu.servings / item.servings : 1;
+    const ingredients = (item.ingredients || []).map((ing) => ({
+      name: ing.name || '',
+      amount: (ing.amount || 0) * scale,
+      unit: ing.unit || '',
+    }));
+
+    if (ingredients.length === 0) {
+      return { ...item, nutrition: null, nutritionStatus: 'partial' };
+    }
+
+    const result = calculateNutrition(
+      { ingredients, peopleCount: menu.servings },
+      factMap,
+    );
+
+    if (result.nutritionStatus !== 'complete') {
+      overallNutritionStatus = 'partial';
+    }
+
+    return {
+      ...item,
+      nutrition: {
+        calories: result.calories,
+        protein: result.protein,
+        fat: result.fat,
+        carbohydrate: result.carbohydrate,
+      },
+      nutritionStatus: result.nutritionStatus,
+    };
+  });
+
   const now = new Date().toISOString();
   await db.collection('menus').doc(menuId).update({
     data: {
       status: 'confirmed',
+      nutritionStatus: overallNutritionStatus,
+      items: itemsWithNutrition,
       updatedAt: now,
     },
   });
@@ -698,6 +775,7 @@ async function handleConfirmMenu(event, wxContext) {
   return ok({
     menuId: menuId,
     status: 'confirmed',
+    nutritionStatus: overallNutritionStatus,
     updatedAt: now,
   });
 }
@@ -786,6 +864,16 @@ async function handleGetMenuHistory(event, wxContext) {
 
   const items = docs.map((doc) => {
     const menuItems = doc.items || [];
+    let totalCalories = 0;
+    let dishNutritionStatus = 'complete';
+    for (const it of menuItems) {
+      if (it.nutrition && typeof it.nutrition.calories === 'number') {
+        totalCalories += it.nutrition.calories;
+      }
+      if (it.nutritionStatus === 'partial') {
+        dishNutritionStatus = 'partial';
+      }
+    }
     return {
       _id: doc._id,
       menuId: doc._id,
@@ -795,6 +883,8 @@ async function handleGetMenuHistory(event, wxContext) {
       dateLabel: (doc.createdAt || '').slice(0, 10),
       dishCount: menuItems.length,
       dishNames: menuItems.map((it) => it.name).filter(Boolean),
+      totalCalories: totalCalories > 0 ? totalCalories : 0,
+      nutritionStatus: doc.nutritionStatus || dishNutritionStatus || 'unknown',
       createdAt: doc.createdAt || '',
       updatedAt: doc.updatedAt || '',
     };
