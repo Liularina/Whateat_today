@@ -345,6 +345,13 @@ async function runBehaviorTests() {
     checkEqual('鸡蛋热量 126.7 kcal', egg.nutrition.calories, 126.7);
     checkEqual('鸡蛋蛋白质 11.7 g', egg.nutrition.protein, 11.7);
 
+    // 合约：items 与入参顺序一一对应、长度一致
+    // （食材列表页就是靠这个位置对齐把热量挂回每一条食材的）
+    checkEqual('items 长度与入参一致', res.data.items.length, 2);
+    checkEqual('items[0] 对应入参第 1 项', res.data.items[0].name, '番茄');
+    checkEqual('items[1] 对应入参第 2 项', res.data.items[1].name, '鸡蛋');
+    checkEqual('items 回显 amount / unit', res.data.items[1].amount + res.data.items[1].unit, '2个');
+
     // 总量 = 45 + 126.72
     checkEqual('总量热量 172 kcal', res.data.calories, 172);
     checkEqual('总量蛋白质 14.4 g', res.data.protein, 14.4);

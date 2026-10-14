@@ -3,6 +3,7 @@
     <view class="ingredient__name">
       {{item.standardName}}
       <text class="ingredient__alias" wx:if="{{item.aliasText}}">{{item.aliasText}}</text>
+      <text class="ingredient__calorie" wx:if="{{item.calorieText}}">{{item.calorieText}}</text>
     </view>
     <view class="ingredient__meta">
       <text class="ingredient__tag" wx:if="{{categoryLabel}}">{{categoryLabel}}</text>

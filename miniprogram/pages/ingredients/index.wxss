@@ -140,8 +140,6 @@
   bottom: 0;
   left: 0;
   z-index: 11;
-  display: flex;
-  flex-direction: column;
   max-height: 84vh;
   padding: 32rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
   background: var(--wte-card);
@@ -156,8 +154,8 @@
 }
 
 .sheet__body {
-  flex: 1;
-  min-height: 0;
+  /* WeChat scroll-view 不能靠 flex:1 撑开，必须给显式高度 */
+  max-height: 55vh;
   margin-top: 24rpx;
 }
 

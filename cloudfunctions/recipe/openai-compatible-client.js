@@ -414,6 +414,35 @@ function chatCompletionsRequest(url, apiKey, body, timeoutMs) {
 /* ============================== Chat Completions 高层接口 ============================== */
 
 /**
+ * 从 aiConfig 解析出明文 API Key。
+ *
+ * 两条来源，互斥：
+ *   1. `aiConfig.apiKey` —— 内置通道，凭据来自云函数环境变量，明文且不落库；
+ *   2. 加密字段 —— 用户自配 Key，AES-256-GCM 密文存库，此处解密。
+ *
+ * 安全前提：aiConfig 必须由服务端构造。若把客户端传入的对象直接透传进来，
+ * 调用方就能自带任意 Key 冒充平台内置凭据，因此调用点只能是服务端解析器。
+ *
+ * @param {object} aiConfig { baseUrl, model, apiKey? } | { baseUrl, model, encryptedApiKey, keyNonce, keyAuthTag }
+ * @returns {string} 明文 API Key
+ */
+function resolveApiKey(aiConfig) {
+  if (!aiConfig) {
+    throw Object.assign(new Error('AI 配置不完整'), { code: 'AI_CONFIG_INCOMPLETE' });
+  }
+
+  if (typeof aiConfig.apiKey === 'string' && aiConfig.apiKey.trim()) {
+    return aiConfig.apiKey.trim();
+  }
+
+  return decryptApiKey({
+    encrypted: aiConfig.encryptedApiKey,
+    nonce: aiConfig.keyNonce,
+    authTag: aiConfig.keyAuthTag,
+  });
+}
+
+/**
  * 发送 Chat Completions 请求并返回解析后的消息文本。
  *
  * 必需参数通过 aiConfig 传入，可选的 response_format 等由 caller 在 extra 中指定。
@@ -436,12 +465,8 @@ async function chatCompletion(aiConfig, messages, options = {}) {
   // 1. URL 校验
   const url = validateAndBuildUrl(aiConfig.baseUrl);
 
-  // 2. 解密 API Key
-  const apiKey = decryptApiKey({
-    encrypted: aiConfig.encryptedApiKey,
-    nonce: aiConfig.keyNonce,
-    authTag: aiConfig.keyAuthTag,
-  });
+  // 2. 取 API Key（内置通道走环境变量明文，自配 Key 走密文解密）
+  const apiKey = resolveApiKey(aiConfig);
 
   // 3. 构造请求体
   const body = {
@@ -679,6 +704,7 @@ module.exports = {
   encryptApiKey,
   maskApiKey,
   decryptApiKey,
+  resolveApiKey,
 
   // URL 校验
   validateAndBuildUrl,

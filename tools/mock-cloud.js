@@ -13,7 +13,8 @@
  *   await fn.main({ action: 'createFamily' });
  *
  * 已支持：where / orderBy / skip / limit / get / count / remove / update /
- *        doc().get|update|remove / add / command.in / db.RegExp
+ *        doc().get|update|remove / add / command.in / command.lt / command.inc /
+ *        db.RegExp
  * 未支持：聚合、事务 —— 第一阶段的云函数用不到。
  */
 const Module = require('module');
@@ -24,10 +25,14 @@ const IN_CMD = '__in__';
 /** 内部使用的正则标记，对应 db.RegExp({ regexp, options }) */
 const REGEXP_CMD = '__regexp__';
 
-/** 内部使用的比较 / 逻辑命令标记，对应 db.command.gte / lte / and */
+/** 内部使用的比较 / 逻辑命令标记，对应 db.command.gte / lte / lt / and */
 const GTE_CMD = '__gte__';
 const LTE_CMD = '__lte__';
+const LT_CMD = '__lt__';
 const AND_CMD = '__and__';
+
+/** 内部使用的原子自增标记，对应 db.command.inc */
+const INC_CMD = '__inc__';
 
 /** 规范第 12.13 节列出的全部集合 */
 const KNOWN_COLLECTIONS = [
@@ -42,6 +47,12 @@ const KNOWN_COLLECTIONS = [
   'nutrition_facts',
   'ingredient_aliases',
   'ai_logs',
+  'user_ai_configs',
+  'user_ai_prefs',
+  'ai_usage',
+  'family_cookbook',
+  'cookbook_versions',
+  'shopping_lists',
 ];
 
 function createMockCloud() {
@@ -102,6 +113,12 @@ function createMockCloud() {
       const conditions = Array.prototype.slice.call(arguments);
       return { [AND_CMD]: conditions };
     },
+    lt(value) {
+      return { [LT_CMD]: value };
+    },
+    inc(value) {
+      return { [INC_CMD]: value };
+    },
   };
 
   /** 判断单个字段值是否满足（可能是普通值，也可能是命令对象） */
@@ -115,6 +132,9 @@ function createMockCloud() {
       }
       if (Object.prototype.hasOwnProperty.call(expected, LTE_CMD)) {
         return actual <= expected[LTE_CMD];
+      }
+      if (Object.prototype.hasOwnProperty.call(expected, LT_CMD)) {
+        return actual < expected[LT_CMD];
       }
       if (expected[REGEXP_CMD]) {
         const spec = expected[REGEXP_CMD];
@@ -132,6 +152,39 @@ function createMockCloud() {
     return Object.keys(condition).every((key) => matchValue(doc[key], condition[key]));
   }
 
+  /**
+   * 写入更新字段，识别 db.command.inc 的原子自增，并支持真实云数据库的
+   * 「点号路径」更新（如 'items.0.locked'）。
+   * 真实云数据库的 inc / 路径写入都在服务端完成，这里等价模拟。
+   */
+  function applyUpdate(doc, data) {
+    Object.keys(data || {}).forEach((key) => {
+      const value = data[key];
+      if (value && typeof value === 'object' &&
+        Object.prototype.hasOwnProperty.call(value, INC_CMD)) {
+        doc[key] = (Number(doc[key]) || 0) + value[INC_CMD];
+      } else if (key.indexOf('.') !== -1) {
+        setDottedPath(doc, key, value);
+      } else {
+        doc[key] = value;
+      }
+    });
+  }
+
+  /** 按点号路径写值；中间层不存在时按「下一段是否为数字」创建数组或对象 */
+  function setDottedPath(target, path, value) {
+    const parts = path.split('.');
+    let node = target;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      if (node[part] === undefined || node[part] === null || typeof node[part] !== 'object') {
+        node[part] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+      }
+      node = node[part];
+    }
+    node[parts[parts.length - 1]] = value;
+  }
+
   function assertCollection(name) {
     if (state.missingCollections.indexOf(name) !== -1) {
       const error = new Error('collection ' + name + ' not exists');
@@ -141,7 +194,7 @@ function createMockCloud() {
   }
 
   function makeQuery(name, queryState) {
-    const current = queryState || { condition: {}, order: null, take: 0, skip: 0 };
+    const current = queryState || { condition: {}, order: null, take: 0, skip: 0, fields: null };
 
     return {
       where(next) {
@@ -157,6 +210,9 @@ function createMockCloud() {
       },
       skip(count) {
         return makeQuery(name, Object.assign({}, current, { skip: count }));
+      },
+      field(projection) {
+        return makeQuery(name, Object.assign({}, current, { fields: projection }));
       },
       async get() {
         assertCollection(name);
@@ -177,7 +233,20 @@ function createMockCloud() {
         if (current.take > 0) {
           rows = rows.slice(0, current.take);
         }
-        return { data: rows.map(clone) };
+        if (current.fields) {
+          const projected = [];
+          for (const doc of rows) {
+            const out = { _id: doc._id };
+            Object.keys(current.fields).forEach((k) => {
+              if (current.fields[k]) out[k] = clone(doc[k]);
+            });
+            projected.push(out);
+          }
+          rows = projected;
+        } else {
+          rows = rows.map(clone);
+        }
+        return { data: rows };
       },
       async count() {
         assertCollection(name);
@@ -204,7 +273,7 @@ function createMockCloud() {
         let updated = 0;
         for (const doc of ensureCollection(name)) {
           if (matches(doc, current.condition)) {
-            Object.assign(doc, payload.data);
+            applyUpdate(doc, payload.data);
             updated += 1;
           }
         }
@@ -247,7 +316,7 @@ function createMockCloud() {
               error.errCode = -502002;
               throw error;
             }
-            Object.assign(found, payload.data);
+            applyUpdate(found, payload.data);
             return { stats: { updated: 1 } };
           },
           async remove() {
@@ -264,7 +333,20 @@ function createMockCloud() {
           throw new Error('mock: ' + name + ' add failed');
         }
 
-        const doc = Object.assign({ _id: nextId(name) }, payload.data);
+        const data = payload.data || {};
+
+        // 与真实云数据库一致：显式指定已存在的 _id 时按主键冲突报错。
+        // 额度计数器依赖这个语义（固定 _id = userId_日期）来保证同日只有一行。
+        if (data._id !== undefined && data._id !== null) {
+          const exists = ensureCollection(name).some((doc) => doc._id === data._id);
+          if (exists) {
+            const error = new Error('duplicate key error: _id already exists');
+            error.errCode = -501001;
+            throw error;
+          }
+        }
+
+        const doc = Object.assign({ _id: nextId(name) }, data);
         ensureCollection(name).push(doc);
         return { _id: doc._id };
       },

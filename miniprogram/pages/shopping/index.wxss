@@ -1,0 +1,167 @@
+/* 采购清单（Phase E1 / E3） */
+
+/* ---------- 摘要卡片 ---------- */
+.summary {
+  display: flex;
+  justify-content: space-around;
+  padding: 30rpx 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.summary__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.summary__num {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #ff7a45;
+}
+
+.summary__label {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---------- 分组 ---------- */
+.group {
+  margin-bottom: 28rpx;
+}
+
+.group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 8rpx 12rpx;
+}
+
+.group__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.group__count {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---------- 采购项 ---------- */
+.item {
+  display: flex;
+  align-items: flex-start;
+  padding: 22rpx 24rpx;
+  background: #faf6f0;
+  border-radius: 16rpx;
+  transition: background 0.15s ease;
+}
+
+.item + .item {
+  margin-top: 12rpx;
+}
+
+.item--hover {
+  background: #fff3e8;
+}
+
+.item--checked {
+  opacity: 0.6;
+}
+
+.item--checked.item--enough {
+  opacity: 0.45;
+}
+
+.item__check {
+  flex-shrink: 0;
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 12rpx;
+  margin-top: 4rpx;
+  margin-right: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 3rpx solid #e0d6c8;
+  font-size: 26rpx;
+  color: #fff;
+  transition: all 0.15s ease;
+}
+
+.item--checked .item__check {
+  background: #ff7a45;
+  border-color: #ff7a45;
+  color: #fff;
+}
+
+.item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.item__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.item__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.item__amount {
+  font-size: 26rpx;
+  color: #ff7a45;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.item__meta {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.item__stock {
+  color: #34b262;
+}
+
+.item__dishes {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #c2947a;
+  line-height: 1.5;
+}
+
+/* ---------- 底部说明 ---------- */
+.footnote {
+  padding: 32rpx 8rpx 0;
+  font-size: 24rpx;
+  color: #d4c5b5;
+  text-align: center;
+}
+
+/* ---------- 底部栏 ---------- */
+.footer-actions {
+  display: flex;
+  gap: 20rpx;
+}
+
+.footer-actions__btn {
+  flex: 1;
+}
+
+.footer-actions__btn--busy {
+  opacity: 0.5;
+  pointer-events: none;
+}

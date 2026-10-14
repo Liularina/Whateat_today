@@ -401,6 +401,21 @@ function runStructureChecks() {
     itemWxml.indexOf('ingredient__shelf--warning') !== -1 &&
       itemWxml.indexOf('ingredient__shelf--expired') !== -1,
   );
+  check('食材组件直接展示卡路里', itemWxml.indexOf('item.calorieText') !== -1);
+
+  // 14.1 卡路里必须来自服务端，禁止前端再养一份营养表
+  check(
+    '前端不存在重复的营养数据表',
+    fs.existsSync(path.join(root, 'miniprogram', 'utils', 'nutrition-lookup.ts')) === false,
+  );
+  check(
+    '食材页通过 nutrition 云函数取热量',
+    pageSource.indexOf('nutritionService.calculate') !== -1,
+  );
+  check(
+    '食材页未自行做营养换算（不直接乘 per100g / edibleRate）',
+    /per100g|edibleRate/.test(pageSource) === false,
+  );
 
   // 15. 食材页按分类折叠，并接上快捷操作
   check(
@@ -1242,6 +1257,42 @@ async function runBehaviorTests() {
       checkEqual('别名文案带原始名', view.aliasText, '（西红柿）');
       checkEqual('数量文案', view.quantityText, '3 个');
       checkEqual('新鲜食材不标临期', view.isWarning, false);
+      checkEqual('未传热量映射时不展示卡路里', view.calorieText, '');
+
+      /* ---- 卡路里只展示服务端算出的值，前端不做换算 ---- */
+      const withCalories = group.toIngredientView(sample[0], today, { g1: 45.4 });
+      checkEqual('卡路里按服务端值展示', withCalories.calorieText, '约 45 kcal');
+      checkEqual(
+        '热量映射按 _id 命中，不串到其他食材',
+        group.toIngredientView(sample[2], today, { g1: 45.4 }).calorieText,
+        '',
+      );
+      checkEqual(
+        '热量为 0（如食盐）不展示',
+        group.toIngredientView(sample[0], today, { g1: 0 }).calorieText,
+        '',
+      );
+      checkEqual(
+        '非法热量值不展示',
+        group.toIngredientView(sample[0], today, { g1: NaN }).calorieText,
+        '',
+      );
+
+      const groupedWithCalories = group.buildCategoryGroups(
+        sample,
+        {},
+        today,
+        { g1: 45.4 },
+      );
+      let calorieTextInGroups = '';
+      for (const g of groupedWithCalories) {
+        for (const v of g.items) {
+          if (v._id === 'g1') {
+            calorieTextInGroups = v.calorieText;
+          }
+        }
+      }
+      checkEqual('分组视图透传热量映射', calorieTextInGroups, '约 45 kcal');
 
       const sorted = group.sortByShelfLife([
         group.toIngredientView(sample[2], today), // unknown

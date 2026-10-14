@@ -1,7 +1,7 @@
 /**
- * AI 配置服务（Phase 7）
+ * AI 配置服务（Phase 7 / Phase C）
  *
- * 封装 ai-config 云函数调用：配置查询、保存、删除、连接测试。
+ * 封装 ai-config 云函数调用：配置查询、保存、删除、连接测试、模式切换。
  * API Key 不在此层缓存或本地存储。
  */
 import { AI_REQUEST_TIMEOUT } from '../constants/config';
@@ -10,13 +10,19 @@ import type {
   AiConfigInput,
   AiConfigDeleteResult,
   AiConfigTestResult,
+  AiMode,
 } from '../types/ai-config';
 import { callFunction } from '../utils/cloud';
 
 export const aiConfigService = {
-  /** 获取当前用户的非敏感配置 */
+  /** 获取当前用户的非敏感配置、AI 模式与内置额度 */
   getConfig(): Promise<AiConfigInfo> {
     return callFunction<AiConfigInfo>('ai-config', 'getAiConfig');
+  },
+
+  /** 切换 AI 模式（内置 / 自定义） */
+  setMode(mode: AiMode): Promise<{ mode: AiMode }> {
+    return callFunction<{ mode: AiMode }>('ai-config', 'setAiMode', { mode });
   },
 
   /** 保存或更新配置 */

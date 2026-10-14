@@ -24,15 +24,20 @@ const db = cloud.database();
 const _ = db.command;
 
 const {
-  readFullAiConfig,
   chatCompletion,
   extractJson,
   attemptJsonRepair,
   AI_CALL_TIMEOUT_MS,
 } = require('./openai-compatible-client');
 
+const aiService = require('./ai-service');
+
 const { BUILTIN_NUTRITION_FACTS } = require('./nutrition-data');
 const { calculateNutrition } = require('./nutrition-core');
+
+/* ============================== 过敏原 / 忌口硬过滤（Phase E2） ============================== */
+
+const { buildDiet, filterRecipes } = require('./diet-filter');
 
 /* ============================== 统一响应 ============================== */
 
@@ -93,6 +98,22 @@ async function requireFamilyMember(openid, familyId) {
     return { error: fail('NOT_IN_FAMILY', '你不是该家庭的成员') };
   }
   return { user, member: memberResult.data[0] };
+}
+
+/**
+ * 读取家庭偏好（Phase E2）。读取失败按「无偏好」处理，不阻塞菜单操作。
+ */
+async function loadFamilyPreferences(familyId) {
+  try {
+    const res = await db.collection('families').doc(familyId).get();
+    const family = res && res.data;
+    return (family && family.preferences) || {};
+  } catch (e) {
+    if (!isCollectionMissing(e)) {
+      console.error('[menu] 读取家庭偏好失败，按无偏好处理', e && e.message);
+    }
+    return {};
+  }
 }
 
 /* ============================== 业务约束 ============================== */
@@ -195,22 +216,6 @@ async function loadIngredients(familyId) {
 }
 
 /* ============================== AI 调用辅助 ============================== */
-
-async function getAiConfigForUser(userId) {
-  let aiConfig;
-  try {
-    aiConfig = await readFullAiConfig(db, userId);
-  } catch (e) {
-    if (isCollectionMissing(e)) {
-      throw Object.assign(new Error('数据库集合 user_ai_configs 不存在'), { code: 'DB_NOT_READY' });
-    }
-    throw e;
-  }
-  if (!aiConfig) {
-    throw Object.assign(new Error('尚未配置模型 API'), { code: 'AI_CONFIG_REQUIRED' });
-  }
-  return aiConfig;
-}
 
 /**
  * 调用 AI，用候选菜谱列表做选菜。
@@ -424,18 +429,7 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('ITEM_LOCKED', '该菜品已锁定，请先取消锁定后再替换');
   }
 
-  // 3. 读取 AI 配置
-  let aiConfig;
-  try {
-    aiConfig = await getAiConfigForUser(auth.user._id);
-  } catch (e) {
-    if (e.code === 'AI_CONFIG_REQUIRED') {
-      return fail('AI_CONFIG_REQUIRED', '尚未配置模型 API，请先在「模型 API 设置」中配置');
-    }
-    throw e;
-  }
-
-  // 4. 读取家庭食材 & 菜谱库
+  // 3. 读取家庭食材 & 菜谱库
   const ingredients = await loadIngredients(familyId);
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
   const recipes = await loadRecipes();
@@ -443,9 +437,17 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('NO_RECIPES', '菜谱库为空');
   }
 
-  // 5. 候选列表：排除当前菜单已有菜品和 target 本身
+  // E2：按家庭过敏原 / 忌口硬过滤，AI 只能从安全菜谱里选
+  const familyPrefs = await loadFamilyPreferences(familyId);
+  const diet = buildDiet(familyPrefs);
+  const dietFiltered = filterRecipes(recipes, diet);
+  if (diet.rules.length > 0 && dietFiltered.kept.length === 0) {
+    return fail('DIET_BLOCKED', '按家庭过敏原与忌口过滤后没有可替换的菜谱，请调整家庭偏好');
+  }
+
+  // 4. 候选列表：排除当前菜单已有菜品和 target 本身
   const usedIds = new Set((menu.items || []).map((it) => it.recipeId));
-  const candidates = recipes
+  const candidates = dietFiltered.kept
     .filter((r) => !usedIds.has(r._id))
     .map((r) => toCandidateSummary(r, inventoryNames))
     .sort((a, b) => {
@@ -459,7 +461,7 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('NO_REPLACEMENT', '暂无合适的替换菜品，请取消部分锁定或调整偏好');
   }
 
-  // 6. AI 选菜
+  // 5. AI 选菜（凭据解析、额度扣减、用量日志均在 runAiCall 内完成）
   const systemInstructions = [
     '你是一个饮食推荐助手。请从候选菜谱中选择 1 道菜替换当前菜品。',
     '要求：',
@@ -475,8 +477,17 @@ async function handleReplaceMenuItem(event, wxContext) {
 
   let selectedIds;
   try {
-    selectedIds = await aiPickRecipes(aiConfig, systemInstructions, candidates, 1, otherNames);
+    selectedIds = await aiService.runAiCall(
+      db,
+      auth.user._id,
+      { action: 'replaceMenuItem', requestId: event.requestId || '' },
+      (aiConfig) => aiPickRecipes(aiConfig, systemInstructions, candidates, 1, otherNames),
+    );
   } catch (e) {
+    // 模式相关错误（内置未就绪 / 额度用尽 / 未配置）：文案由 ai-service 统一维护
+    if (aiService.friendlyAiMessage(e.code)) {
+      return fail(e.code, aiService.friendlyAiMessage(e.code));
+    }
     // AI 调用失败：保留原菜单
     const errorMessages = {
       'AI_AUTH_FAILED': '模型认证失败，请检查 API 配置',
@@ -494,9 +505,9 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('NO_REPLACEMENT', '暂无合适的替换菜品');
   }
 
-  // 7. 校验新 recipeId
+  // 6. 校验新 recipeId
   const recipeMap = {};
-  for (const r of recipes) recipeMap[r._id] = r;
+  for (const r of dietFiltered.kept) recipeMap[r._id] = r;
 
   const newRecipeId = selectedIds[0];
   const newRecipe = recipeMap[newRecipeId];
@@ -504,7 +515,7 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('AI_INVALID', '模型返回的菜品无效，请重试');
   }
 
-  // 8. 写入菜单
+  // 7. 写入菜单
   const newItem = {
     ...toRecipeView(newRecipe),
     locked: false,
@@ -555,18 +566,7 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     return fail('ALL_LOCKED', '所有菜品均已锁定，无需重新推荐');
   }
 
-  // 2. 读取 AI 配置
-  let aiConfig;
-  try {
-    aiConfig = await getAiConfigForUser(auth.user._id);
-  } catch (e) {
-    if (e.code === 'AI_CONFIG_REQUIRED') {
-      return fail('AI_CONFIG_REQUIRED', '尚未配置模型 API');
-    }
-    throw e;
-  }
-
-  // 3. 读取食材 & 菜谱
+  // 2. 读取食材 & 菜谱
   const ingredients = await loadIngredients(familyId);
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
   const recipes = await loadRecipes();
@@ -574,9 +574,17 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     return fail('NO_RECIPES', '菜谱库为空');
   }
 
-  // 4. 候选列表：排除所有锁定菜品
+  // E2：按家庭过敏原 / 忌口硬过滤，AI 只能从安全菜谱里选
+  const familyPrefs = await loadFamilyPreferences(familyId);
+  const diet = buildDiet(familyPrefs);
+  const dietFiltered = filterRecipes(recipes, diet);
+  if (diet.rules.length > 0 && dietFiltered.kept.length === 0) {
+    return fail('DIET_BLOCKED', '按家庭过敏原与忌口过滤后没有可重新推荐的菜谱，请调整家庭偏好');
+  }
+
+  // 3. 候选列表：排除所有锁定菜品
   const lockedIds = new Set(lockedItems.map((it) => it.recipeId));
-  const candidates = recipes
+  const candidates = dietFiltered.kept
     .filter((r) => !lockedIds.has(r._id))
     .map((r) => toCandidateSummary(r, inventoryNames))
     .sort((a, b) => {
@@ -590,7 +598,7 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     return fail('NO_REPLACEMENT', '候选菜品不足，无法为所有未锁定菜品找到替换');
   }
 
-  // 5. AI 选择
+  // 4. AI 选择（凭据解析、额度扣减、用量日志均在 runAiCall 内完成）
   const systemInstructions = [
     '你是一个饮食推荐助手。请从候选菜谱中选择 ' + unlockedItems.length + ' 道菜替换当前菜品。',
     '已锁定菜品：' + lockedItems.map((it) => it.name).join('、'),
@@ -603,21 +611,29 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
 
   let selectedIds;
   try {
-    selectedIds = await aiPickRecipes(aiConfig, systemInstructions, candidates, unlockedItems.length, lockedItems.map((it) => it.name));
+    selectedIds = await aiService.runAiCall(
+      db,
+      auth.user._id,
+      { action: 'regenerateUnlockedItems', requestId: event.requestId || '' },
+      (aiConfig) => aiPickRecipes(aiConfig, systemInstructions, candidates, unlockedItems.length, lockedItems.map((it) => it.name)),
+    );
   } catch (e) {
+    if (aiService.friendlyAiMessage(e.code)) {
+      return fail(e.code, aiService.friendlyAiMessage(e.code));
+    }
     return fail('AI_FAILED', e.message || 'AI 调用失败');
   }
 
-  // 6. 校验
+  // 5. 校验
   const recipeMap = {};
-  for (const r of recipes) recipeMap[r._id] = r;
+  for (const r of dietFiltered.kept) recipeMap[r._id] = r;
 
   const validIds = selectedIds.filter((id) => recipeMap[id] && !lockedIds.has(id));
   if (validIds.length === 0) {
     return fail('AI_INVALID', '模型返回的菜品均无效，原菜单保持不变');
   }
 
-  // 7. 构建新 items 数组：锁定项保留，解锁项替换
+  // 6. 构建新 items 数组：锁定项保留，解锁项替换
   const newItems = [];
   let validIdx = 0;
   for (const item of items) {
@@ -638,7 +654,7 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     }
   }
 
-  // 8. 原子写入
+  // 7. 原子写入
   const now = new Date().toISOString();
   await db.collection('menus').doc(menuId).update({
     data: {
@@ -932,6 +948,8 @@ exports.main = async (event = {}) => {
   } catch (error) {
     if (isCollectionMissing(error)) {
       response = fail('DB_NOT_READY', '数据库集合不存在，请先在云开发控制台创建');
+    } else if (aiService.friendlyAiMessage(error.code)) {
+      response = fail(error.code, aiService.friendlyAiMessage(error.code));
     } else {
       console.error('[menu] 未捕获异常', error.code || '', error.message || '');
       response = fail('INTERNAL_ERROR', '服务内部异常，请稍后重试');

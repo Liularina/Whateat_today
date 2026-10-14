@@ -2,10 +2,11 @@
  * ai-config 云函数 · 用户自定义模型 API 配置（Phase 7）
  *
  * 职责：
- *   getAiConfig    —— 获取当前用户的非敏感 API 配置
+ *   getAiConfig    —— 获取当前用户的非敏感 API 配置 + AI 模式 + 内置通道状态
  *   saveAiConfig   —— 保存或更新 API 配置（服务端 AES-256-GCM 加密 Key）
  *   deleteAiConfig —— 删除当前用户的 API 配置
  *   testAiConfig   —— 测试当前配置的连通性
+ *   setAiMode      —— 切换「内置 AI / 自定义 API」模式
  *
  * 安全：
  *   1. 身份只来自 cloud.getWXContext().OPENID，绝不信任客户端传入的 userId；
@@ -32,6 +33,8 @@ const {
   AI_TEST_TIMEOUT_MS,
   ENV_ENCRYPTION_KEY,
 } = require('./openai-compatible-client');
+
+const aiService = require('./ai-service');
 
 /* ============================== 统一响应 ============================== */
 
@@ -127,8 +130,10 @@ function validateApiKey(apiKey) {
 /* ============================== 业务处理器 ============================== */
 
 /**
- * 获取当前用户的非敏感配置。
- * 返回 baseUrl / model / maskedApiKey，不返回任何加密材料或完整 Key。
+ * 获取当前用户的非敏感配置，并附带当前 AI 模式与内置通道状态。
+ * 返回 baseUrl / model / maskedApiKey，不返回任何加密材料、完整 Key 或供应商凭据。
+ *
+ * 无论当前是哪种模式都返回内置额度信息，便于前端在选择模式时展示剩余次数。
  */
 async function handleGetAiConfig(event, wxContext) {
   const openid = wxContext.OPENID || '';
@@ -143,15 +148,74 @@ async function handleGetAiConfig(event, wxContext) {
 
   try {
     const config = await readAiConfig(db, user._id);
+    const mode = await aiService.readAiMode(db, user._id);
+    const quota = await aiService.getQuotaStatus(db, user._id);
+
     return ok({
       configured: config.configured,
       baseUrl: config.baseUrl || '',
       model: config.model || '',
       maskedApiKey: config.maskedApiKey || '',
+      mode: mode,
+      // 内置状态不含 Base URL / 模型名 / Key，只给可用性与额度
+      builtin: aiService.getBuiltinStatus(),
+      quota: {
+        dailyQuota: quota.dailyQuota,
+        used: quota.used,
+        remaining: quota.remaining,
+      },
     });
   } catch (e) {
     if (e.code === 'ENCRYPTION_KEY_MISSING' || e.code === 'ENCRYPTION_KEY_INVALID') {
       return fail('ENCRYPTION_KEY_MISSING', '服务端加密密钥未正确配置，请联系管理员');
+    }
+    throw e;
+  }
+}
+
+/**
+ * 切换 AI 模式。
+ *
+ * 切到自定义模式前要求已有可用配置：否则用户切过去后每次调用都会失败，
+ * 而错误现场（AI 设置页）看起来一切正常，极难排查。
+ */
+async function handleSetAiMode(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  if (!openid) {
+    return fail('AUTH_REQUIRED', '请先登录');
+  }
+
+  const user = await findUserByOpenid(openid);
+  if (!user) {
+    return fail('USER_NOT_FOUND', '用户不存在，请重新登录');
+  }
+
+  const mode = (event.mode || '').trim();
+  if (!aiService.isValidAiMode(mode)) {
+    return fail('INVALID_PARAMS', '无效的 AI 模式');
+  }
+
+  if (mode === aiService.AI_MODE_CUSTOM) {
+    let existing = null;
+    try {
+      existing = await readFullAiConfig(db, user._id);
+    } catch (e) {
+      if (isCollectionMissing(e)) {
+        return fail('DB_NOT_READY', '数据库集合 user_ai_configs 不存在，请先在云开发控制台创建');
+      }
+      throw e;
+    }
+    if (!existing) {
+      return fail('AI_CONFIG_REQUIRED', '请先填写并保存自己的 API 配置，再切换到自定义模式');
+    }
+  }
+
+  try {
+    const saved = await aiService.saveAiMode(db, user._id, mode);
+    return ok({ mode: saved });
+  } catch (e) {
+    if (e.code === 'AI_DB_NOT_READY') {
+      return fail('DB_NOT_READY', '数据库集合 user_ai_prefs 不存在，请先在云开发控制台创建');
     }
     throw e;
   }
@@ -315,7 +379,26 @@ async function handleDeleteAiConfig(event, wxContext) {
     throw e;
   }
 
-  return ok({ deleted: true });
+  // 自定义模式依赖这份配置：删掉后必须把模式退回内置。
+  // 否则用户停在「模式是自定义、但没有配置」的状态，之后每次 AI 调用都失败，
+  // 而设置页看起来一切正常，问题很难定位。
+  let modeReset = false;
+  try {
+    const mode = await aiService.readAiMode(db, user._id);
+    if (mode === aiService.AI_MODE_CUSTOM) {
+      await aiService.saveAiMode(db, user._id, aiService.DEFAULT_AI_MODE);
+      modeReset = true;
+    }
+  } catch (e) {
+    // 模式回退失败不应影响删除本身的结果，只记录
+    console.error('[ai-config] 删除配置后回退 AI 模式失败', (e && e.message) || '');
+  }
+
+  return ok({
+    deleted: true,
+    mode: modeReset ? aiService.DEFAULT_AI_MODE : null,
+    modeReset: modeReset,
+  });
 }
 
 /**
@@ -436,6 +519,7 @@ const handlers = {
   saveAiConfig: handleSaveAiConfig,
   deleteAiConfig: handleDeleteAiConfig,
   testAiConfig: handleTestAiConfig,
+  setAiMode: handleSetAiMode,
 };
 
 /* ============================== 入口 ============================== */
@@ -465,6 +549,9 @@ exports.main = async (event = {}) => {
         error.code === 'DECRYPT_FAILED';
       if (isCryptoError) {
         response = fail('INTERNAL_ERROR', '服务端配置异常，请联系管理员');
+      } else if (aiService.friendlyAiMessage(error.code)) {
+        // 只映射白名单内的 AI 错误码：其余错误保持通用文案，避免把内部细节透给客户端
+        response = fail(error.code, aiService.friendlyAiMessage(error.code));
       } else {
         console.error('[ai-config] 未捕获异常', error.code || '', error.message || '');
         response = fail('INTERNAL_ERROR', '服务内部异常，请稍后重试');

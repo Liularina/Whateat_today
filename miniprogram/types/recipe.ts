@@ -32,6 +32,102 @@ export interface RecipeSubstitution {
 
 export type RecipeSource = 'template' | 'ai' | 'manual' | 'builtin';
 
+/* ============================== Phase D：家庭菜谱库 ============================== */
+
+/** cookbook_versions.source 取值 */
+export type CookbookVersionSource = 'generated' | 'edited';
+
+/** family_cookbook.status 取值 */
+export type CookbookStatus = 'active' | 'archived';
+
+/**
+ * family_cookbook 集合：家庭菜谱入口。
+ *
+ * 唯一键：(familyId, recipeId, servings)。
+ * 一个家庭对同一道菜谱模版用同一人数时只存一份。
+ */
+export interface FamilyCookbookEntry {
+  _id: string;
+  familyId: string;
+  /** 关联的 recipes 模版 _id */
+  recipeId: string;
+  /** 冗余字段：模版名称，方便列表展示不 join */
+  name: string;
+  /** 冗余字段：模版分类 */
+  category: string;
+  /** 冗余字段：难度 */
+  difficulty: Difficulty;
+  /** 冗余字段：烹饪时间 */
+  cookTime: number;
+  /** 人数（与 generateCookingSteps 入参同步） */
+  servings: number;
+  /** 当前最新版本号，从 1 起 */
+  latestVersion: number;
+  /** active | archived */
+  status: CookbookStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * cookbook_versions 集合：做法版本链。
+ *
+ * 一条 family_cookbook 可有多行 cookbook_versions，按 version 升序。
+ * source=generated 为 AI 生成的原始版本；source=edited 为人工编辑覆盖。
+ * 编辑只更新当前版本的 data 与 source 字段，不新增行。
+ * 重新生成会产生新行（version + 1）。
+ */
+export interface CookbookVersion {
+  _id: string;
+  cookbookId: string;
+  familyId: string;
+  version: number;
+  source: CookbookVersionSource;
+  data: GeneratedCookingData;
+  createdAt: string;
+  /** 谁做了这次操作（user._id） */
+  createdBy: string;
+}
+
+/** 家庭菜谱列表查询参数 */
+export interface CookbookListParams {
+  familyId: string;
+  category?: string;
+  status?: CookbookStatus;
+  page?: number;
+  pageSize?: number;
+}
+
+/** 家庭菜谱列表项（摘要，不含做法数据） */
+export interface CookbookSummary {
+  _id: string;
+  name: string;
+  category: string;
+  difficulty: Difficulty;
+  cookTime: number;
+  servings: number;
+  latestVersion: number;
+  status: CookbookStatus;
+  createdAt: string;
+}
+
+/** 家庭菜谱列表返回 */
+export interface CookbookListResult {
+  items: CookbookSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** 家庭菜谱详情：入口 + 当前版本做法 + 所有版本号 */
+export interface CookbookDetail {
+  entry: FamilyCookbookEntry;
+  current: CookbookVersion;
+  versionList: { version: number; source: CookbookVersionSource; createdAt: string }[];
+}
+
+/* ============================== 菜谱模板库 ============================== */
+
 /** recipes 集合文档：菜谱模板库 */
 export interface Recipe {
   _id: string;

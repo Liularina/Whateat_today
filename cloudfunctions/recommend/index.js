@@ -22,12 +22,13 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 const {
-  readFullAiConfig,
   chatCompletion,
   extractJson,
   attemptJsonRepair,
   AI_CALL_TIMEOUT_MS,
 } = require('./openai-compatible-client');
+
+const aiService = require('./ai-service');
 
 /* ============================== 统一响应 ============================== */
 
@@ -71,6 +72,10 @@ function toIsoString(date) {
 
 const { todayInBeijing, filterExpired } = require('./shelf-filter');
 
+/* ============================== 过敏原 / 忌口硬过滤（Phase E2） ============================== */
+
+const { buildDiet, filterRecipes, summarizeDiet } = require('./diet-filter');
+
 /* ============================== 用户与家庭校验 ============================== */
 
 async function findUserByOpenid(openid) {
@@ -102,6 +107,24 @@ async function requireFamilyMember(openid, familyId) {
   }
 
   return { user, member };
+}
+
+/**
+ * 读取家庭偏好（Phase E2）。
+ * families 文档不存在或读取失败时按「无偏好」处理，不阻塞推荐；
+ * 过敏原硬过滤依赖这里返回的 allergens / avoidIngredients。
+ */
+async function loadFamilyPreferences(familyId) {
+  try {
+    const res = await db.collection('families').doc(familyId).get();
+    const family = res && res.data;
+    return (family && family.preferences) || {};
+  } catch (e) {
+    if (!isCollectionMissing(e)) {
+      console.error('[recommend] 读取家庭偏好失败，按无偏好处理', e && e.message);
+    }
+    return {};
+  }
 }
 
 /* ============================== 业务约束 ============================== */
@@ -180,6 +203,21 @@ function toRecipeView(recipe) {
 /* ============================== AI 推荐 ============================== */
 
 /**
+ * 把「固定要求 + 可选要求」拼成带序号的提示词要求列表。
+ * 可选行为空时会被剔除，序号仍然连续，避免出现「5. 」后直接跳到「7. 」。
+ */
+function buildRequirementText(baseLines, optionalLines) {
+  const lines = [];
+  (baseLines || []).forEach((line) => {
+    if (line) lines.push(line);
+  });
+  (optionalLines || []).forEach((line) => {
+    if (line) lines.push(line);
+  });
+  return lines.map((line, index) => (index + 1) + '. ' + line).join('\n');
+}
+
+/**
  * 根据家庭食材和菜谱库，通过 AI 推荐 3 套菜单。
  *
  * 入参：
@@ -200,22 +238,14 @@ async function handleRecommendMenus(event, wxContext) {
   }
   const user = auth.user;
 
-  // 2. 读取 AI 配置
-  let aiConfig;
-  try {
-    aiConfig = await readFullAiConfig(db, user._id);
-  } catch (e) {
-    if (isCollectionMissing(e)) {
-      return fail('DB_NOT_READY', '数据库集合 user_ai_configs 不存在，请先在云开发控制台创建');
-    }
-    throw e;
-  }
+  // E2：家庭偏好是过敏原 / 忌口硬过滤的唯一来源，只读服务端数据，不信任客户端
+  const familyPrefs = await loadFamilyPreferences(event.familyId || '');
+  const diet = buildDiet(familyPrefs);
+  const tasteHint = Array.isArray(familyPrefs.taste)
+    ? familyPrefs.taste.filter((item) => typeof item === 'string' && item.trim()).join('、')
+    : '';
 
-  if (!aiConfig) {
-    return fail('AI_CONFIG_REQUIRED', '尚未配置模型 API，请先在「模型 API 设置」中配置');
-  }
-
-  // 3. 解析入参
+  // 2. 解析入参
   const mealType = event.mealType || 'dinner';
   if (!MEAL_TYPE_LABELS[mealType]) {
     return fail('INVALID_PARAMS', '无效的餐次：' + mealType);
@@ -229,7 +259,7 @@ async function handleRecommendMenus(event, wxContext) {
   const preferences = (event.preferences || '').trim();
   const excludeIds = new Set((event.excludeRecipeIds || []).filter((id) => typeof id === 'string' && id.length > 0));
 
-  // 4. 读取家庭食材
+  // 3. 读取家庭食材
   let ingredients;
   try {
     const ingResult = await db.collection('ingredients')
@@ -254,7 +284,7 @@ async function handleRecommendMenus(event, wxContext) {
 
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
 
-  // 5. 读取启用的内置菜谱
+  // 4. 读取启用的内置菜谱
   let recipes;
   try {
     const recipeResult = await db.collection('recipes')
@@ -273,8 +303,18 @@ async function handleRecommendMenus(event, wxContext) {
     return fail('NO_RECIPES', '菜谱库还是空的，请先初始化菜谱数据');
   }
 
-  // 6. 生成候选列表
-  const candidates = recipes
+  // 4.1 E2：先按家庭过敏原 / 忌口做程序硬过滤，AI 只能看到过滤后的安全菜谱
+  const dietFiltered = filterRecipes(recipes, diet);
+  const blockedIds = new Set(dietFiltered.blocked.map((item) => item.recipeId));
+  if (blockedIds.size > 0) {
+    console.log('[recommend] 过敏原/忌口已过滤 ' + blockedIds.size + ' 道菜');
+  }
+  if (diet.rules.length > 0 && dietFiltered.kept.length === 0) {
+    return fail('DIET_BLOCKED', '按家庭过敏原与忌口过滤后已没有可推荐的菜谱，请调整家庭偏好');
+  }
+
+  // 5. 生成候选列表（只用安全菜谱）
+  const candidates = dietFiltered.kept
     .filter((r) => !excludeIds.has(r._id))
     .map((r) => toCandidateSummary(r, inventoryNames))
     .sort((a, b) => {
@@ -289,7 +329,7 @@ async function handleRecommendMenus(event, wxContext) {
     return fail('NO_CANDIDATES', '没有找到可推荐的菜谱');
   }
 
-  // 7. 构建 AI 提示词
+  // 6. 构建 AI 提示词
   const inventoryList = ingredients
     .map((i) => `${i.standardName || i.name}（${i.amount || 0}${i.unit || 'g'}）`)
     .join('、') || '暂无食材';
@@ -299,14 +339,24 @@ async function handleRecommendMenus(event, wxContext) {
     '请根据以下信息，从提供的候选菜谱中选择菜品，推荐 ' + MENU_COUNT + ' 套不同的菜单组合。',
     '',
     '要求：',
-    '1. 每套菜单包含 1~3 道菜，尽量荤素搭配；',
-    '2. 优先选择能利用现有食材的菜谱（matchedIngredients 越多的越好）；',
-    '3. 结合餐次（' + MEAL_TYPE_LABELS[mealType] + '）选择合适菜品；',
-    '4. 尽量减少需要额外采购的食材；',
-    preferences ? '5. 遵守以下饮食偏好：' + preferences : '',
+    buildRequirementText([
+      '每套菜单包含 1~3 道菜，尽量荤素搭配；',
+      '优先选择能利用现有食材的菜谱（matchedIngredients 越多的越好）；',
+      '结合餐次（' + MEAL_TYPE_LABELS[mealType] + '）选择合适菜品；',
+      '尽量减少需要额外采购的食材；',
+    ], [
+      preferences ? '遵守以下饮食偏好：' + preferences : '',
+      tasteHint ? '家庭口味偏好：' + tasteHint : '',
+      diet.allergenTags.length > 0
+        ? '严禁选择含以下过敏原的菜品：' + diet.allergenTags.join('、')
+        : '',
+      diet.avoidTags.length > 0
+        ? '严禁选择家庭忌口的菜品：' + diet.avoidTags.join('、')
+        : '',
+    ]),
     '',
     '只输出 JSON，不要输出解释、Markdown 代码围栏或其他内容。',
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 
   const userPrompt = [
     '当前家庭食材：' + inventoryList,
@@ -336,18 +386,27 @@ async function handleRecommendMenus(event, wxContext) {
     '}',
   ].join('\n');
 
-  // 8. 调用 AI
+  // 7. 调用 AI（凭据解析、额度扣减、用量日志均在 runAiCall 内完成）
   let aiText;
   try {
-    aiText = await chatCompletion(
-      aiConfig,
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      { temperature: 0.7, max_tokens: MAX_OUTPUT_TOKENS, timeoutMs: AI_CALL_TIMEOUT_MS },
+    aiText = await aiService.runAiCall(
+      db,
+      user._id,
+      { action: 'recommendMenus', requestId: event.requestId || '' },
+      (aiConfig) => chatCompletion(
+        aiConfig,
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        { temperature: 0.7, max_tokens: MAX_OUTPUT_TOKENS, timeoutMs: AI_CALL_TIMEOUT_MS },
+      ),
     );
   } catch (e) {
+    // 模式相关错误（内置未就绪 / 额度用尽 / 未配置）：文案由 ai-service 统一维护
+    if (aiService.friendlyAiMessage(e.code)) {
+      return fail(e.code, aiService.friendlyAiMessage(e.code));
+    }
     // 映射 AI 调用错误
     const errorMessages = {
       'AI_AUTH_FAILED': '模型认证失败，请检查 API 配置',
@@ -362,7 +421,7 @@ async function handleRecommendMenus(event, wxContext) {
     return fail('AI_FAILED', friendly);
   }
 
-  // 9. 解析 AI 输出
+  // 8. 解析 AI 输出
   let parsed = extractJson(aiText);
   if (!parsed) {
     // 尝试一次修复
@@ -373,18 +432,25 @@ async function handleRecommendMenus(event, wxContext) {
     return fail('AI_FORMAT_ERROR', '模型返回格式不正确，请稍后重试或检查 API 兼容性');
   }
 
-  // 10. 校验结果
+  // 9. 校验结果（只接受过滤后的安全菜谱）
   const recipeMap = {};
-  for (const r of recipes) {
+  for (const r of dietFiltered.kept) {
     recipeMap[r._id] = r;
   }
 
+  let blockedAfterAi = 0;
   const validMenus = [];
   for (const menu of parsed.menus) {
     if (!menu.title || !Array.isArray(menu.recipeIds)) continue;
 
-    // 校验每个 recipeId 都在候选列表里
-    const validIds = menu.recipeIds.filter((id) => recipeMap[id]);
+    // 校验每个 recipeId 都在安全候选里；命中过敏原 / 忌口的一律丢弃并计数
+    const validIds = menu.recipeIds.filter((id) => {
+      if (blockedIds.has(id)) {
+        blockedAfterAi += 1;
+        return false;
+      }
+      return !!recipeMap[id];
+    });
     if (validIds.length === 0) continue;
 
     const items = validIds.map((id) => toRecipeView(recipeMap[id]));
@@ -412,6 +478,8 @@ async function handleRecommendMenus(event, wxContext) {
     servings: servings,
     inventoryCount: ingredients.length,
     candidateCount: candidates.length,
+    diet: summarizeDiet(diet, dietFiltered.blocked),
+    blockedByDietAfterAi: blockedAfterAi,
     menus: validMenus,
     createdAt: new Date().toISOString(),
   });

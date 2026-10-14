@@ -1,19 +1,26 @@
 /**
- * recipe 云函数 · 基础菜谱库（Phase 6）+ AI 生成做法（Phase 10）
+ * recipe 云函数 · 基础菜谱库（Phase 6）+ AI 生成做法（Phase 10）+ 家庭菜谱库（Phase D）
  *
  * 职责：
- *   listRecipes  —— 菜谱列表（分类筛选 / 关键词搜索 / 分页）
- *   getRecipe    —— 菜谱详情
- *   generateCookingSteps —— AI 生成详细烹饪步骤（Phase 10）
- *   seedRecipes  —— 初始化内置菜谱
+ *   listRecipes       —— 菜谱列表（分类筛选 / 关键词搜索 / 分页）
+ *   getRecipe         —— 菜谱详情
+ *   generateCookingSteps —— AI 生成详细烹饪步骤（Phase 10，Phase D 重写为走家庭菜谱库）
+ *   generateRecipe    —— 为已确认菜单批量生成做法（Phase D）
+ *   retryRecipe       —— 重新生成单道菜做法（Phase D）
+ *   getRecipeDetail   —— 查询某道菜的做法（Phase D）
+ *   editCookbookRecipe—— 编辑做法（Phase D）
+ *   listCookbook      —— 家庭菜谱列表（Phase D）
+ *   getCookbook       —— 家庭菜谱详情（Phase D）
+ *   seedRecipes       —— 初始化内置菜谱
  *
  * 安全与边界：
  *   1. 内置菜谱是公共只读数据，查询不要求登录、也不涉及家庭权限；
  *   2. 写操作只由初始化脚本（seed-recipes.js）在开发者环境执行，
  *      云函数不提供任何菜谱写接口，客户端无法篡改内置菜谱；
  *   3. 只读 isActive = true 的菜谱，已禁用的菜谱在列表与详情中都不可见；
- *   4. AI 生成的做法保存在独立的 generated_recipes 集合，不覆盖原始菜谱；
- *   5. API Key 使用用户自配密钥，经 AES-256-GCM 解密，不落地日志。
+ *   4. AI 生成的做法保存在家庭菜谱库（family_cookbook + cookbook_versions）；
+ *   5. API Key 使用统一 AI 路由（ai-service），不在此层处理模式选择；
+ *   6. 家庭菜谱库操作必须通过 familyId 校验成员身份。
  */
 const cloud = require('wx-server-sdk');
 
@@ -33,12 +40,13 @@ const {
 const seedRecipeLibrary = require('./seed-recipes').seedRecipes;
 
 const {
-  readFullAiConfig,
   chatCompletion,
   extractJson,
   attemptJsonRepair,
   AI_CALL_TIMEOUT_MS,
 } = require('./openai-compatible-client');
+
+const aiService = require('./ai-service');
 
 /** 云数据库「集合不存在」错误码 */
 const ERR_COLLECTION_NOT_EXIST = -502005;
@@ -72,9 +80,6 @@ function fail(code, message, details) {
 /**
  * 家庭身份校验：绝不直接信任前端传来的 familyId。
  * openid → users → family_members，确认用户确实属于该家庭后才允许继续。
- *
- * Phase 6 的菜谱查询是公共只读数据，用不到这个校验；
- * 保留给后续阶段（generateRecipe / retryRecipe）的按家庭操作使用。
  */
 async function requireFamilyMember(openid, familyId) {
   if (!familyId) {
@@ -236,8 +241,6 @@ function parseListParams(event) {
 /**
  * 菜谱列表。
  * 只返回启用的内置菜谱（source = 'builtin'）。
- * 说明：本阶段列表页就是「内置家常菜谱库」，用户自建菜谱要到后续阶段才支持；
- * 届时需要放宽这里的 source 过滤，否则自建菜谱会查不到。
  */
 async function listRecipes(event) {
   const parsed = parseListParams(event);
@@ -312,72 +315,58 @@ async function getRecipe(event) {
   return ok({ recipe: toRecipeDetail(doc) });
 }
 
-/* ============================== Phase 10：AI 生成做法 ============================== */
+/* ============================== Phase 10 / Phase D：AI 生成做法 + 家庭菜谱库 ============================== */
 
 const MAX_GENERATED_STEPS_TEXT = 4096;
 const MAX_OUTPUT_TOKENS = 2048;
 
-async function handleGenerateCookingSteps(event, wxContext) {
-  const openid = wxContext.OPENID || '';
-  const recipeId = String(event.recipeId || '').trim();
-  if (!recipeId) return fail('INVALID_PARAMS', '缺少 recipeId');
+/** 家庭菜谱列表每页上限 */
+const COOKBOOK_PAGE_SIZE = 20;
+const COOKBOOK_PAGE_SIZE_MAX = 50;
 
-  // 读取菜谱
-  let doc;
-  try {
-    const res = await recipesCol.doc(recipeId).get();
-    doc = res && res.data ? res.data : null;
-  } catch (error) {
-    if (isCollectionMissing(error)) return fail('DB_NOT_READY', DB_NOT_READY_MESSAGE);
-    if (isDocMissing(error)) return fail('RECIPE_NOT_FOUND', '菜谱不存在或已下架');
-    throw error;
-  }
-  if (!doc || doc.isActive === false) return fail('RECIPE_NOT_FOUND', '菜谱不存在或已下架');
+/* ------------------------------ 家庭菜谱库辅助 ------------------------------ */
 
-  // 检查是否已有生成结果
+const cookbookCol = db.collection('family_cookbook');
+const versionsCol = db.collection('cookbook_versions');
+
+/**
+ * 查家庭菜谱缓存：按 (familyId, recipeId, servings) 精确匹配。
+ * 返回入口文档，没有则返回 null。
+ */
+async function findCookbookEntry(familyId, recipeId, servings) {
   try {
-    const exist = await db.collection('generated_recipes')
-      .where({ recipeId: recipeId, userId: openid })
-      .orderBy('createdAt', 'desc')
+    const res = await cookbookCol
+      .where({ familyId, recipeId, servings, status: 'active' })
       .limit(1)
       .get();
-    if (exist.data && exist.data.length > 0) {
-      return ok({
-        source: 'cached',
-        recipeId: recipeId,
-        data: exist.data[0].data,
-        createdAt: exist.data[0].createdAt,
-      });
-    }
+    return res.data[0] || null;
   } catch (e) {
-    if (!isCollectionMissing(e)) throw e;
-  }
-
-  // 读 AI 配置
-  let aiConfig;
-  try {
-    const userResult = await db.collection('users').where({ openid }).limit(1).get();
-    const user = userResult.data[0];
-    if (!user) return fail('UNAUTHORIZED', '请先登录');
-    aiConfig = await readFullAiConfig(db, user._id);
-  } catch (e) {
-    if (isCollectionMissing(e)) {
-      return fail('AI_CONFIG_REQUIRED', '尚未配置模型 API，请先去设置');
-    }
+    if (isCollectionMissing(e)) return null;
     throw e;
   }
-  if (!aiConfig) return fail('AI_CONFIG_REQUIRED', '尚未配置模型 API');
+}
 
-  const servings = Number.isInteger(event.servings) && event.servings > 0 ? event.servings : (doc.servings || 2);
-  const preferences = String(event.preferences || '').trim();
+/**
+ * 读取某条入口的最新版本做法。
+ */
+async function getLatestVersion(cookbookId, version) {
+  try {
+    const res = await versionsCol
+      .where({ cookbookId, version })
+      .limit(1)
+      .get();
+    return res.data[0] || null;
+  } catch (e) {
+    if (isCollectionMissing(e)) return null;
+    throw e;
+  }
+}
 
-  // 已有数据
-  const existingSteps = (Array.isArray(doc.steps) ? doc.steps : [])
-    .map((s, i) => ({ step: s.step || i + 1, description: s.description || '', minutes: s.minutes || 0 }));
-  const existingIngredients = (Array.isArray(doc.ingredients) ? doc.ingredients : [])
-    .map((ing) => ({ name: ing.name || '', amount: ing.amount || 0, unit: ing.unit || '' }));
-
-  const systemPrompt = [
+/**
+ * 生成系统提示词（generateCookingSteps 与批量生成共用）
+ */
+function buildSystemPrompt(preferences) {
+  return [
     '你是一个专业的中餐烹饪助手。请根据提供的真实菜谱数据生成详细的烹饪做法。',
     '规则：',
     '1. 食材用量以提供的真实数据为准，可乘以份数比例调整但不得编造或替换主料；',
@@ -398,8 +387,18 @@ async function handleGenerateCookingSteps(event, wxContext) {
       safetyNotes: ['安全提示'],
     }),
   ].filter(Boolean).join('\n');
+}
 
-  const userPrompt = [
+/**
+ * 用菜谱模板数据构造用户提示词
+ */
+function buildUserPrompt(doc, servings) {
+  const existingSteps = (Array.isArray(doc.steps) ? doc.steps : [])
+    .map((s, i) => ({ step: s.step || i + 1, description: s.description || '', minutes: s.minutes || 0 }));
+  const existingIngredients = (Array.isArray(doc.ingredients) ? doc.ingredients : [])
+    .map((ing) => ({ name: ing.name || '', amount: ing.amount || 0, unit: ing.unit || '' }));
+
+  return [
     '菜谱名称：' + doc.name,
     '分类：' + (doc.category || ''),
     '原适用人数：' + (doc.servings || 0),
@@ -409,34 +408,33 @@ async function handleGenerateCookingSteps(event, wxContext) {
     existingSteps.length > 0 ? '已有步骤：' + JSON.stringify(existingSteps) : '',
     '请生成详细做法。',
   ].filter(Boolean).join('\n');
+}
 
-  let aiText;
-  try {
-    aiText = await chatCompletion(
+/**
+ * 调用 AI 生成做法并解析
+ */
+async function aiGenerateSteps(user, recipeDoc, servings, preferences, event) {
+  const systemPrompt = buildSystemPrompt(preferences);
+  const userPrompt = buildUserPrompt(recipeDoc, servings);
+
+  const aiText = await aiService.runAiCall(
+    db,
+    user._id,
+    { action: 'generateCookingSteps', requestId: event.requestId || '' },
+    (aiConfig) => chatCompletion(
       aiConfig,
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       { temperature: 0.7, max_tokens: MAX_OUTPUT_TOKENS, timeoutMs: AI_CALL_TIMEOUT_MS },
-    );
-  } catch (e) {
-    const msg = {
-      'AI_AUTH_FAILED': '模型认证失败',
-      'AI_CONNECTION_FAILED': '无法连接模型',
-      'AI_TIMEOUT': '模型响应超时。请稍后重试；若持续出现，请在「模型 API 设置」中改用响应更快的模型',
-      'AI_EMPTY_RESPONSE': '模型没有返回有效内容，请检查该模型是否兼容 OpenAI 对话接口',
-      'AI_REQUEST_FAILED': '请求失败',
-      'DECRYPT_FAILED': '密钥解密失败',
-    };
-    return fail('AI_FAILED', msg[e.code] || (e.message || 'AI 调用失败'));
-  }
+    ),
+  );
 
   let parsed = extractJson(aiText);
   if (!parsed) parsed = attemptJsonRepair(aiText);
-
   if (!parsed || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
-    return fail('AI_FORMAT_ERROR', '模型返回格式不正确，请重试');
+    throw Object.assign(new Error('模型返回格式不正确，请重试'), { code: 'AI_FORMAT_ERROR' });
   }
 
   // 校验与裁剪
@@ -456,41 +454,546 @@ async function handleGenerateCookingSteps(event, wxContext) {
   parsed.safetyNotes = (Array.isArray(parsed.safetyNotes) ? parsed.safetyNotes : []).map((n) => String(n || '').slice(0, 500));
   parsed.introduction = String(parsed.introduction || '').slice(0, 500);
   parsed.servings = servings;
+  return parsed;
+}
 
-  // 保存到 generated_recipes
+/**
+ * 将生成结果保存到家庭菜谱库。
+ * 首次生成：创建 family_cookbook 入口 + cookbook_versions version=1。
+ * 重新生成：version+1、新增 cookbook_versions 行、旧版保留。
+ */
+async function saveCookbookVersion(familyId, recipeDoc, servings, parsedData, createdBy) {
   const now = new Date().toISOString();
+
+  // 查现有入口
+  let entry = await findCookbookEntry(familyId, recipeDoc._id, servings);
+
+  if (entry) {
+    // 已有入口：版本递增
+    const nextVersion = entry.latestVersion + 1;
+    await cookbookCol.doc(entry._id).update({
+      data: { latestVersion: nextVersion, updatedAt: now },
+    });
+    await versionsCol.add({
+      data: {
+        cookbookId: entry._id,
+        familyId: familyId,
+        version: nextVersion,
+        source: 'generated',
+        data: parsedData,
+        createdAt: now,
+        createdBy: createdBy,
+      },
+    });
+    return { cookbookId: entry._id, version: nextVersion, isNew: false };
+  }
+
+  // 首次创建入口 + 第一版
+  const entryResult = await cookbookCol.add({
+    data: {
+      familyId: familyId,
+      recipeId: recipeDoc._id,
+      name: recipeDoc.name || '',
+      category: recipeDoc.category || '',
+      difficulty: recipeDoc.difficulty || 'easy',
+      cookTime: Number(recipeDoc.cookTime) || 0,
+      servings: servings,
+      latestVersion: 1,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+
+  await versionsCol.add({
+    data: {
+      cookbookId: entryResult._id,
+      familyId: familyId,
+      version: 1,
+      source: 'generated',
+      data: parsedData,
+      createdAt: now,
+      createdBy: createdBy,
+    },
+  });
+
+  return { cookbookId: entryResult._id, version: 1, isNew: true };
+}
+
+/* ------------------------------ Phase 10：生成做法（重写） ------------------------------ */
+
+/**
+ * 为单道菜谱模版生成做法。
+ * 入参新增 familyId —— 同一道菜同一人数在同一个家庭里只存一份，全家共享。
+ * 旧 generated_recipes 的缓存仍会先查一次以兼容已有数据，但新生成结果写入家庭菜谱库。
+ */
+async function handleGenerateCookingSteps(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const recipeId = String(event.recipeId || '').trim();
+  const familyId = String(event.familyId || '').trim();
+  if (!recipeId) return fail('INVALID_PARAMS', '缺少 recipeId');
+
+  // 读取菜谱模板
+  let doc;
+  try {
+    const res = await recipesCol.doc(recipeId).get();
+    doc = res && res.data ? res.data : null;
+  } catch (error) {
+    if (isCollectionMissing(error)) return fail('DB_NOT_READY', DB_NOT_READY_MESSAGE);
+    if (isDocMissing(error)) return fail('RECIPE_NOT_FOUND', '菜谱不存在或已下架');
+    throw error;
+  }
+  if (!doc || doc.isActive === false) return fail('RECIPE_NOT_FOUND', '菜谱不存在或已下架');
+
+  const servings = Number.isInteger(event.servings) && event.servings > 0 ? event.servings : (doc.servings || 2);
+
+  // 读当前用户
+  let user;
+  try {
+    const userResult = await db.collection('users').where({ openid }).limit(1).get();
+    user = userResult.data[0];
+  } catch (e) {
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 users 不存在');
+    throw e;
+  }
+  if (!user) return fail('UNAUTHORIZED', '请先登录');
+
+  // 如提供了 familyId，校验成员身份
+  if (familyId) {
+    const auth = await requireFamilyMember(openid, familyId);
+    if (auth.error) return auth.error;
+    user = auth.user;
+  }
+
+  // 1. 先查旧缓存（generated_recipes，兼容已有数据）
+  let oldCached;
+  try {
+    oldCached = await db.collection('generated_recipes')
+      .where({ recipeId, userId: openid })
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+  } catch (e) {
+    if (!isCollectionMissing(e)) throw e;
+  }
+  if (oldCached && oldCached.data && oldCached.data.length > 0) {
+    return ok({
+      source: 'cached',
+      recipeId: recipeId,
+      data: oldCached.data[0].data,
+      createdAt: oldCached.data[0].createdAt,
+    });
+  }
+
+  // 2. 查家庭菜谱库缓存
+  if (familyId) {
+    const entry = await findCookbookEntry(familyId, recipeId, servings);
+    if (entry) {
+      const versionDoc = await getLatestVersion(entry._id, entry.latestVersion);
+      if (versionDoc) {
+        return ok({
+          source: 'cached',
+          recipeId: recipeId,
+          cookbookId: entry._id,
+          version: entry.latestVersion,
+          data: versionDoc.data,
+          createdAt: versionDoc.createdAt,
+        });
+      }
+    }
+  }
+
+  // 3. 调用 AI 生成
+  const preferences = String(event.preferences || '').trim();
+  let parsed;
+  try {
+    parsed = await aiGenerateSteps(user, doc, servings, preferences, event);
+  } catch (e) {
+    if (aiService.friendlyAiMessage(e.code)) return fail(e.code, aiService.friendlyAiMessage(e.code));
+    if (e.code === 'AI_FORMAT_ERROR') return fail('AI_FORMAT_ERROR', e.message);
+    const msg = {
+      'AI_AUTH_FAILED': '模型认证失败', 'AI_CONNECTION_FAILED': '无法连接模型',
+      'AI_TIMEOUT': '模型响应超时。请稍后重试',
+      'AI_EMPTY_RESPONSE': '模型没有返回有效内容',
+      'AI_REQUEST_FAILED': '请求失败', 'DECRYPT_FAILED': '密钥解密失败',
+    };
+    return fail('AI_FAILED', msg[e.code] || (e.message || 'AI 调用失败'));
+  }
+
+  // 4. 保存到家庭菜谱库（如无 familyId 则退回到 generated_recipes）
+  const now = new Date().toISOString();
+
+  if (familyId) {
+    try {
+      const saved = await saveCookbookVersion(familyId, doc, servings, parsed, user._id);
+      return ok({
+        source: 'generated',
+        recipeId: recipeId,
+        cookbookId: saved.cookbookId,
+        version: saved.version,
+        data: parsed,
+        createdAt: now,
+      });
+    } catch (e) {
+      if (isCollectionMissing(e)) {
+        return fail('DB_NOT_READY', '数据库集合 family_cookbook 或 cookbook_versions 不存在');
+      }
+      throw e;
+    }
+  }
+
+  // 无 familyId → 退回到旧表（客户端尚未适配时的过渡路径）
   let savedId;
   try {
     const result = await db.collection('generated_recipes').add({
-      data: {
-        recipeId: recipeId,
-        userId: openid,
-        data: parsed,
-        createdAt: now,
-        updatedAt: now,
-      },
+      data: { recipeId, userId: openid, data: parsed, createdAt: now, updatedAt: now },
     });
     savedId = result._id;
   } catch (e) {
-    if (isCollectionMissing(e)) {
-      return fail('DB_NOT_READY', '数据库集合 generated_recipes 不存在');
-    }
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 generated_recipes 不存在');
     throw e;
   }
 
   return ok({
-    source: 'generated',
-    recipeId: recipeId,
-    generatedId: savedId,
-    data: parsed,
-    createdAt: now,
+    source: 'generated', recipeId: recipeId, generatedId: savedId, data: parsed, createdAt: now,
+  });
+}
+
+/* ------------------------------ Phase D：批量生成菜单做法 ------------------------------ */
+
+/**
+ * 为已确认的菜单生成全部菜品的详细做法。
+ * 逐道检查家庭菜谱库是否已有做法，有则跳过，无则调用 AI 生成并写入。
+ */
+async function handleGenerateRecipe(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const menuId = String(event.menuId || '').trim();
+  const familyId = String(event.familyId || '').trim();
+  if (!menuId) return fail('INVALID_PARAMS', '缺少 menuId');
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+  const user = auth.user;
+
+  // 读取菜单
+  let menuDoc;
+  try {
+    const res = await db.collection('menus').doc(menuId).get();
+    menuDoc = res && res.data ? res.data : null;
+  } catch (error) {
+    if (isDocMissing(error)) return fail('MENU_NOT_FOUND', '菜单不存在');
+    if (isCollectionMissing(error)) return fail('DB_NOT_READY', '数据库集合 menus 不存在');
+    throw error;
+  }
+  if (!menuDoc) return fail('MENU_NOT_FOUND', '菜单不存在');
+  if (menuDoc.familyId !== familyId) return fail('FORBIDDEN', '无权访问该菜单');
+
+  const items = Array.isArray(menuDoc.items) ? menuDoc.items : [];
+  if (items.length === 0) return fail('INVALID_PARAMS', '该菜单没有菜品');
+
+  const preferences = String(event.preferences || '').trim();
+
+  const results = [];
+  for (const item of items) {
+    const recipeId = item.recipeId || item._id || '';
+    if (!recipeId) continue;
+
+    // 读菜谱模板
+    let recipeDoc;
+    try {
+      recipeDoc = await recipesCol.doc(recipeId).get();
+      recipeDoc = recipeDoc && recipeDoc.data ? recipeDoc.data : null;
+    } catch (e) {
+      results.push({ recipeId, name: item.name || '', status: 'skipped', reason: 'recipe_not_found' });
+      continue;
+    }
+    if (!recipeDoc || !recipeDoc.isActive) {
+      results.push({ recipeId, name: item.name || '', status: 'skipped', reason: 'recipe_inactive' });
+      continue;
+    }
+
+    const servings = menuDoc.servings || recipeDoc.servings || 2;
+
+    // 查缓存
+    const entry = await findCookbookEntry(familyId, recipeId, servings);
+    if (entry) {
+      results.push({ recipeId, name: item.name || '', status: 'cached', cookbookId: entry._id, version: entry.latestVersion });
+      continue;
+    }
+
+    // 生成
+    try {
+      const parsed = await aiGenerateSteps(user, recipeDoc, servings, preferences + ' 菜名：' + (item.name || ''), event);
+      const saved = await saveCookbookVersion(familyId, recipeDoc, servings, parsed, user._id);
+      results.push({ recipeId, name: item.name || '', status: 'generated', cookbookId: saved.cookbookId, version: saved.version });
+    } catch (e) {
+      if (aiService.friendlyAiMessage(e.code)) {
+        results.push({ recipeId, name: item.name || '', status: 'failed', reason: e.code });
+        break;
+      }
+      results.push({ recipeId, name: item.name || '', status: 'failed', reason: (e && e.message) || 'AI 调用失败' });
+    }
+  }
+
+  return ok({
+    menuId,
+    items: results,
+    totalCount: items.length,
+    generatedCount: results.filter((r) => r.status === 'generated').length,
+    cachedCount: results.filter((r) => r.status === 'cached').length,
+  });
+}
+
+/* ------------------------------ Phase D：重新生成单道菜 ------------------------------ */
+
+async function handleRetryRecipe(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const cookbookId = String(event.cookbookId || '').trim();
+  const familyId = String(event.familyId || '').trim();
+  if (!cookbookId) return fail('INVALID_PARAMS', '缺少 cookbookId');
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+  const user = auth.user;
+
+  let entry;
+  try {
+    const res = await cookbookCol.doc(cookbookId).get();
+    entry = res && res.data ? res.data : null;
+  } catch (e) {
+    if (isDocMissing(e)) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 family_cookbook 不存在');
+    throw e;
+  }
+  if (!entry || entry.familyId !== familyId) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+
+  let recipeDoc;
+  try {
+    recipeDoc = await recipesCol.doc(entry.recipeId).get();
+    recipeDoc = recipeDoc && recipeDoc.data ? recipeDoc.data : null;
+  } catch (e) {
+    return fail('RECIPE_NOT_FOUND', '关联的菜谱模板已不存在');
+  }
+  if (!recipeDoc) return fail('RECIPE_NOT_FOUND', '关联的菜谱模板已不存在');
+
+  const preferences = String(event.preferences || '').trim();
+  let parsed;
+  try {
+    parsed = await aiGenerateSteps(user, recipeDoc, entry.servings, preferences, event);
+  } catch (e) {
+    if (aiService.friendlyAiMessage(e.code)) return fail(e.code, aiService.friendlyAiMessage(e.code));
+    if (e.code === 'AI_FORMAT_ERROR') return fail('AI_FORMAT_ERROR', e.message);
+    return fail('AI_FAILED', (e && e.message) || 'AI 调用失败');
+  }
+
+  const saved = await saveCookbookVersion(familyId, recipeDoc, entry.servings, parsed, user._id);
+  return ok({ cookbookId: saved.cookbookId, version: saved.version, data: parsed, createdAt: new Date().toISOString() });
+}
+
+/* ------------------------------ Phase D：查询做法 ------------------------------ */
+
+async function handleGetRecipeDetail(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const cookbookId = String(event.cookbookId || '').trim();
+  const familyId = String(event.familyId || '').trim();
+  if (!cookbookId) return fail('INVALID_PARAMS', '缺少 cookbookId');
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+
+  let entry;
+  try {
+    const res = await cookbookCol.doc(cookbookId).get();
+    entry = res && res.data ? res.data : null;
+  } catch (e) {
+    if (isDocMissing(e)) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 family_cookbook 不存在');
+    throw e;
+  }
+  if (!entry || entry.familyId !== familyId) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+
+  const versionDoc = await getLatestVersion(entry._id, entry.latestVersion);
+  if (!versionDoc) return fail('COOKBOOK_NOT_FOUND', '该菜谱的做法数据缺失');
+
+  return ok({
+    cookbookId: entry._id, name: entry.name, category: entry.category,
+    difficulty: entry.difficulty, cookTime: entry.cookTime, servings: entry.servings,
+    version: entry.latestVersion, source: versionDoc.source,
+    data: versionDoc.data, createdAt: versionDoc.createdAt,
+  });
+}
+
+/* ------------------------------ Phase D：编辑做法 ------------------------------ */
+
+/**
+ * 编辑当前版本的做法。编辑直接覆盖当前版本 data，不新增版本行；source 改为 edited。
+ */
+function sanitizeEditedData(input) {
+  const data = input || {};
+  return {
+    introduction: String(data.introduction || '').slice(0, 500),
+    ingredients: (Array.isArray(data.ingredients) ? data.ingredients : []).map((i) => ({
+      name: String(i.name || '').slice(0, 100),
+      amount: Number.isFinite(i.amount) ? i.amount : 0,
+      unit: String(i.unit || '').slice(0, 20),
+    })),
+    preparation: (Array.isArray(data.preparation) ? data.preparation : []).map((p) => String(p || '').slice(0, 500)),
+    steps: (Array.isArray(data.steps) ? data.steps : []).map((s, i) => ({
+      step: Number(s.step) || i + 1,
+      description: String(s.description || '').slice(0, 800),
+      minutes: Number.isFinite(s.minutes) ? Math.round(s.minutes) : 0,
+    })),
+    tips: (Array.isArray(data.tips) ? data.tips : []).map((t) => String(t || '').slice(0, 500)),
+    safetyNotes: (Array.isArray(data.safetyNotes) ? data.safetyNotes : []).map((n) => String(n || '').slice(0, 500)),
+    servings: data.servings ? Number(data.servings) : undefined,
+  };
+}
+
+async function handleEditCookbookRecipe(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const cookbookId = String(event.cookbookId || '').trim();
+  const familyId = String(event.familyId || '').trim();
+  if (!cookbookId) return fail('INVALID_PARAMS', '缺少 cookbookId');
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+
+  let entry;
+  try {
+    entry = await cookbookCol.doc(cookbookId).get();
+    entry = entry && entry.data ? entry.data : null;
+  } catch (e) {
+    if (isDocMissing(e)) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 family_cookbook 不存在');
+    throw e;
+  }
+  if (!entry || entry.familyId !== familyId) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+
+  const sanitized = sanitizeEditedData(event.data);
+  if (!sanitized.steps || sanitized.steps.length === 0) {
+    return fail('INVALID_PARAMS', 'steps 不能为空');
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await versionsCol
+      .where({ cookbookId, version: entry.latestVersion })
+      .update({ data: { source: 'edited', data: sanitized, createdAt: now } });
+  } catch (e) {
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 cookbook_versions 不存在');
+    throw e;
+  }
+
+  return ok({ cookbookId: cookbookId, version: entry.latestVersion, source: 'edited', updatedAt: now });
+}
+
+/* ------------------------------ Phase D：家庭菜谱列表与详情 ------------------------------ */
+
+async function handleListCookbook(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const familyId = String(event.familyId || '').trim();
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+
+  const page = Math.max(1, Number(event.page) || 1);
+  const pageSize = Math.min(COOKBOOK_PAGE_SIZE_MAX, Math.max(1, Number(event.pageSize) || COOKBOOK_PAGE_SIZE));
+  const category = String(event.category || '').trim();
+  const status = event.status === 'archived' ? 'archived' : 'active';
+
+  let query = cookbookCol.where({ familyId, status });
+  if (category) query = query.where({ category });
+
+  let total;
+  try {
+    total = await query.count();
+    total = total.total;
+  } catch (e) {
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 family_cookbook 不存在');
+    throw e;
+  }
+
+  let docs = [];
+  try {
+    const res = await query.orderBy('createdAt', 'desc').skip((page - 1) * pageSize).limit(pageSize).get();
+    docs = res.data || [];
+  } catch (e) {
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 family_cookbook 不存在');
+    throw e;
+  }
+
+  const items = docs.map((d) => ({
+    _id: d._id, name: d.name || '', category: d.category || '',
+    difficulty: d.difficulty || 'easy', cookTime: Number(d.cookTime) || 0,
+    servings: Number(d.servings) || 0, latestVersion: d.latestVersion || 1,
+    status: d.status || 'active', createdAt: d.createdAt || '',
+  }));
+
+  return ok({ items, total, page, pageSize });
+}
+
+async function handleGetCookbook(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const cookbookId = String(event.cookbookId || '').trim();
+  const familyId = String(event.familyId || '').trim();
+  if (!cookbookId) return fail('INVALID_PARAMS', '缺少 cookbookId');
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+
+  let entry;
+  try {
+    const res = await cookbookCol.doc(cookbookId).get();
+    entry = res && res.data ? res.data : null;
+  } catch (e) {
+    if (isDocMissing(e)) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 family_cookbook 不存在');
+    throw e;
+  }
+  if (!entry || entry.familyId !== familyId) return fail('COOKBOOK_NOT_FOUND', '该菜谱不存在');
+
+  const currentVersion = await getLatestVersion(entry._id, entry.latestVersion);
+
+  let versions = [];
+  try {
+    const res = await versionsCol
+      .where({ cookbookId })
+      .orderBy('version', 'asc')
+      .field({ version: true, source: true, createdAt: true })
+      .get();
+    versions = (res.data || []).map((v) => ({ version: v.version, source: v.source, createdAt: v.createdAt }));
+  } catch (e) {
+    if (!isCollectionMissing(e)) throw e;
+  }
+
+  return ok({
+    entry: {
+      _id: entry._id, familyId: entry.familyId, recipeId: entry.recipeId,
+      name: entry.name, category: entry.category, difficulty: entry.difficulty,
+      cookTime: entry.cookTime, servings: entry.servings,
+      latestVersion: entry.latestVersion, status: entry.status,
+      createdAt: entry.createdAt, updatedAt: entry.updatedAt,
+    },
+    current: currentVersion ? {
+      _id: currentVersion._id, cookbookId: currentVersion.cookbookId,
+      familyId: currentVersion.familyId, version: currentVersion.version,
+      source: currentVersion.source, data: currentVersion.data,
+      createdAt: currentVersion.createdAt, createdBy: currentVersion.createdBy,
+    } : null,
+    versionList: versions,
   });
 }
 
 /* ------------------------------ 业务路由 ------------------------------ */
 
 const handlers = {
-  /** 健康检查：部署后可用来验证云函数是否可用 */
+  /** 健康检查 */
   ping() {
     return ok({ function: 'recipe', status: 'ok', time: Date.now() });
   },
@@ -501,13 +1004,28 @@ const handlers = {
   /** Phase 6：菜谱详情 */
   getRecipe,
 
-  /** Phase 10：AI 生成详细烹饪步骤 */
+  /** Phase 10 / Phase D：AI 生成详细烹饪步骤 */
   generateCookingSteps: handleGenerateCookingSteps,
 
-  /**
-   * 初始化内置菜谱（开发者用，幂等）
-   * 与 Phase 5 的 seedNutritionFacts 一致：只写内置数据，不触碰用户自建菜谱。
-   */
+  /** Phase D：批量生成 */
+  generateRecipe: handleGenerateRecipe,
+
+  /** Phase D：重新生成 */
+  retryRecipe: handleRetryRecipe,
+
+  /** Phase D：查询做法 */
+  getRecipeDetail: handleGetRecipeDetail,
+
+  /** Phase D：编辑做法 */
+  editCookbookRecipe: handleEditCookbookRecipe,
+
+  /** Phase D：菜谱列表 */
+  listCookbook: handleListCookbook,
+
+  /** Phase D：菜谱详情 */
+  getCookbook: handleGetCookbook,
+
+  /** 初始化内置菜谱 */
   async seedRecipes() {
     try {
       return ok(await seedRecipeLibrary(db));
@@ -518,30 +1036,6 @@ const handlers = {
       console.error('[recipe] 初始化内置菜谱失败', error);
       return fail('SEED_RECIPES_FAILED', '菜谱初始化失败，请稍后重试');
     }
-  },
-
-  /**
-   * 按最终菜单生成做法（Phase 7/8）
-   * TODO: 按开发阶段实现，服务端必须做权限校验与入参校验
-   */
-  generateRecipe() {
-    return fail('NOT_IMPLEMENTED', 'recipe.generateRecipe 尚未实现');
-  },
-
-  /**
-   * 重新生成单道菜做法（Phase 7/8）
-   * TODO: 按开发阶段实现，服务端必须做权限校验与入参校验
-   */
-  retryRecipe() {
-    return fail('NOT_IMPLEMENTED', 'recipe.retryRecipe 尚未实现');
-  },
-
-  /**
-   * 查询某道菜在当前菜单下的做法（Phase 7/8）
-   * TODO: 按开发阶段实现，服务端必须做权限校验与入参校验
-   */
-  getRecipeDetail() {
-    return fail('NOT_IMPLEMENTED', 'recipe.getRecipeDetail 尚未实现');
   },
 };
 
@@ -563,11 +1057,14 @@ exports.main = async (event = {}) => {
       response = await handler(event, wxContext);
     }
   } catch (error) {
-    console.error('[' + 'recipe' + '] 未捕获异常', error);
-    response = fail('INTERNAL_ERROR', '服务内部异常，请稍后重试');
+    if (isCollectionMissing(error)) {
+      response = fail('DB_NOT_READY', '数据库集合不存在，请先在云开发控制台创建');
+    } else {
+      console.error('[' + 'recipe' + '] 未捕获异常', error);
+      response = fail('INTERNAL_ERROR', '服务内部异常，请稍后重试');
+    }
   }
 
-  // 统一日志：functionName / requestId / userId / familyId / duration / status / error
   console.log(
     JSON.stringify({
       functionName: 'recipe',

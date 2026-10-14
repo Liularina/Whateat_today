@@ -168,4 +168,11 @@ Page({
     const url = '/pages/recipes/detail?id=' + id + (name ? '&name=' + encodeURIComponent(name) : '');
     wx.navigateTo({ url: url });
   },
+
+  /** Phase E1：已确认菜单 → 采购清单 */
+  onOpenShopping() {
+    const menuId = this.data.menuId;
+    if (!menuId) return;
+    wx.navigateTo({ url: '/pages/shopping/index?menuId=' + menuId });
+  },
 });

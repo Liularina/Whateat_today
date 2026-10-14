@@ -1,7 +1,7 @@
 <view class="page">
   <view class="page-header">
     <view class="page-header__title">模型 API 设置</view>
-    <view class="page-header__subtitle">使用你自己的 API 服务，不收集密钥</view>
+    <view class="page-header__subtitle">选择 AI 服务模式，或配置自己的 API</view>
   </view>
 
   <!-- 1. 加载中 -->
@@ -10,92 +10,150 @@
   <block wx:else>
     <view class="error-tip" wx:if="{{error}}">{{error}}</view>
 
-    <!-- 2. 已保存成功提示 -->
-    <view class="saved-banner" wx:if="{{savedBanner}}">
-      已保存：{{savedBaseUrl}} · 模型 {{savedModel}}
-    </view>
-
-    <view class="card">
-      <view class="field">
-        <view class="field__label">API Base URL</view>
-        <input
-          class="input"
-          value="{{baseUrl}}"
-          placeholder="https://api.example.com/v1"
-          maxlength="256"
-          bindinput="onBaseUrlInput"
-        />
-        <view class="field__hint">必须为 HTTPS 地址，格式与 OpenAI API 兼容</view>
-      </view>
-
-      <view class="field">
-        <view class="field__label">Model 模型名称</view>
-        <input
-          class="input"
-          value="{{model}}"
-          placeholder="例如 gpt-4o-mini"
-          maxlength="128"
-          bindinput="onModelInput"
-        />
-      </view>
-
-      <view class="field">
-        <view class="field__label">
-          API Key
-          <text wx:if="{{configured && !apiKey}}" class="field__label-extra">（留空表示保留已有密钥）</text>
+    <!-- 0. AI 模式选择 -->
+    <view class="card mode-card">
+      <view class="mode-card__title">AI 服务模式</view>
+      <view class="mode-row">
+        <view
+          class="mode-pill {{mode === 'builtin' ? 'mode-pill--active' : ''}}"
+          data-mode="builtin"
+          bindtap="onSelectMode"
+        >
+          <view class="mode-pill__label">内置 AI</view>
+          <view class="mode-pill__desc">开箱即用</view>
+          <view class="mode-pill__badge" wx:if="{{mode === 'builtin'}}">当前</view>
         </view>
-        <!-- 已保存 + 未输入新 Key：显示脱敏占位 -->
-        <input
-          wx:if="{{!configured || apiKey}}"
-          class="input"
-          value="{{apiKey}}"
-          placeholder="{{configured ? '输入新 Key 覆盖旧 Key' : 'sk-...'}}"
-          maxlength="512"
-          password
-          bindinput="onApiKeyInput"
-        />
-        <view wx:else class="masked-key">
-          <view class="masked-key__text">{{savedMaskedKey}}</view>
-          <view class="masked-key__hint">点击上方输入框可更换 Key</view>
+        <view
+          class="mode-pill {{mode === 'custom' ? 'mode-pill--active' : ''}}"
+          data-mode="custom"
+          bindtap="onSelectMode"
+        >
+          <view class="mode-pill__label">自定义 API</view>
+          <view class="mode-pill__desc">你自己的 Key</view>
+          <view class="mode-pill__badge" wx:if="{{mode === 'custom'}}">当前</view>
         </view>
-        <view class="field__hint">密钥只在服务端加密存储，不会泄露给第三方</view>
       </view>
+      <view class="mode-pill__loading" wx:if="{{switchingMode}}">切换中...</view>
+
+      <!-- 内置通道状态 -->
+      <block wx:if="{{mode === 'builtin'}}">
+        <view class="mode-info">
+          <view class="mode-info__row">
+            状态：{{builtinReady ? '可用' : (builtinEnabled ? '暂未就绪' : '未开启')}}
+          </view>
+          <view class="mode-info__row">
+            每日额度：{{quotaRemaining}}/{{builtinDailyQuota}} 次
+          </view>
+          <view class="mode-info__hint" wx:if="{{!builtinReady}}">
+            内置 AI 暂不可用，可切换到「自定义 API」使用自己的服务
+          </view>
+        </view>
+      </block>
     </view>
 
-    <!-- 测试结果 -->
-    <view class="test-result test-result--{{testResultType}}" wx:if="{{testResult}}">
-      {{testResult}}
-    </view>
+    <!-- 自定义配置表单（可折叠） -->
+    <block wx:if="{{customFormOpen}}">
+      <view class="card">
+        <view class="card__section-header">
+          <view class="card__section-title">自定义 API 配置</view>
+          <view class="card__section-toggle" wx:if="{{mode !== 'custom'}}" bindtap="onToggleCustomForm">收起</view>
+        </view>
 
-    <!-- 按钮 -->
-    <view class="actions">
-      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onSave" wx:if="{{!loading}}">
-        保存配置
-      </view>
-      <view class="wte-btn wte-btn--primary wte-btn--block wte-btn--loading" wx:else>
-        正在保存...
-      </view>
+        <!-- 2. 已保存成功提示 -->
+        <view class="saved-banner" wx:if="{{savedBanner}}">
+          已保存：{{savedBaseUrl}} · 模型 {{savedModel}}
+        </view>
 
-      <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onTestConnection" wx:if="{{!testing}}">
-        测试连接
-      </view>
-      <view class="wte-btn wte-btn--ghost wte-btn--block wte-btn--loading btn-gap" wx:else>
-        正在测试...
-      </view>
+        <view class="field">
+          <view class="field__label">API Base URL</view>
+          <input
+            class="input"
+            value="{{baseUrl}}"
+            placeholder="https://api.example.com/v1"
+            maxlength="256"
+            bindinput="onBaseUrlInput"
+          />
+          <view class="field__hint">必须为 HTTPS 地址，格式与 OpenAI API 兼容</view>
+        </view>
 
-      <view class="wte-btn wte-btn--danger wte-btn--block btn-gap" bindtap="onTapDelete" wx:if="{{configured && !deleting}}">
-        删除配置
+        <view class="field">
+          <view class="field__label">Model 模型名称</view>
+          <input
+            class="input"
+            value="{{model}}"
+            placeholder="例如 gpt-4o-mini"
+            maxlength="128"
+            bindinput="onModelInput"
+          />
+        </view>
+
+        <view class="field">
+          <view class="field__label">
+            API Key
+            <text wx:if="{{configured && !apiKey}}" class="field__label-extra">（留空表示保留已有密钥）</text>
+          </view>
+          <!-- 已保存 + 未输入新 Key：显示脱敏占位 -->
+          <input
+            wx:if="{{!configured || apiKey}}"
+            class="input"
+            value="{{apiKey}}"
+            placeholder="{{configured ? '输入新 Key 覆盖旧 Key' : 'sk-...'}}"
+            maxlength="512"
+            password
+            bindinput="onApiKeyInput"
+          />
+          <view wx:else class="masked-key">
+            <view class="masked-key__text">{{savedMaskedKey}}</view>
+            <view class="masked-key__hint">点击上方输入框可更换 Key</view>
+          </view>
+          <view class="field__hint">密钥只在服务端加密存储，不会泄露给第三方</view>
+        </view>
+
+        <!-- 测试结果 -->
+        <view class="test-result test-result--{{testResultType}}" wx:if="{{testResult}}">
+          {{testResult}}
+        </view>
+
+        <!-- 按钮 -->
+        <view class="actions">
+          <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onSave" wx:if="{{!loading}}">
+            保存配置
+          </view>
+          <view class="wte-btn wte-btn--primary wte-btn--block wte-btn--loading" wx:else>
+            正在保存...
+          </view>
+
+          <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onTestConnection" wx:if="{{!testing}}">
+            测试连接
+          </view>
+          <view class="wte-btn wte-btn--ghost wte-btn--block wte-btn--loading btn-gap" wx:else>
+            正在测试...
+          </view>
+
+          <view class="wte-btn wte-btn--danger wte-btn--block btn-gap" bindtap="onTapDelete" wx:if="{{configured && !deleting}}">
+            删除配置
+          </view>
+          <view class="wte-btn wte-btn--danger wte-btn--block wte-btn--loading btn-gap" wx:elif="{{deleting}}">
+            正在删除...
+          </view>
+        </view>
       </view>
-      <view class="wte-btn wte-btn--danger wte-btn--block wte-btn--loading btn-gap" wx:elif="{{deleting}}">
-        正在删除...
+    </block>
+
+    <!-- 收起状态：只显示一条入口 -->
+    <view class="card" wx:elif="{{mode !== 'custom'}}">
+      <view class="card__section-header" bindtap="onToggleCustomForm">
+        <view class="card__section-title">自定义 API 配置</view>
+        <view class="card__section-toggle">展开</view>
       </view>
     </view>
 
     <view class="tips">
       <view class="tips__title">说明</view>
-      <view class="tips__item">• API Key 使用 AES-256-GCM 加密存储，仅服务端可解密</view>
+      <view class="tips__item">• 内置 AI 由平台提供，开箱即用，每日调用次数有限</view>
+      <view class="tips__item">• 自定义 API Key 使用 AES-256-GCM 加密存储，仅服务端可解密</view>
       <view class="tips__item">• 查询接口不返回完整 Key，只显示脱敏状态（如 sk-****abcd）</view>
-      <view class="tips__item">• 删除配置后，旧的加密数据无法恢复</view>
+      <view class="tips__item">• 删除自定义配置后，将自动切回内置 AI</view>
       <view class="tips__item">• 支持所有兼容 OpenAI Chat Completions 的 API 服务</view>
     </view>
   </block>

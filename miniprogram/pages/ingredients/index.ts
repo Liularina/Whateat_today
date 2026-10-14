@@ -19,6 +19,7 @@
 import { INGREDIENT_CATEGORIES } from '../../constants/categories';
 import { UNITS, convertToGram } from '../../constants/units';
 import { ingredientService } from '../../services/ingredient';
+import { nutritionService } from '../../services/nutrition';
 import type { Ingredient, IngredientCategoryCode, IngredientInput } from '../../types/ingredient';
 import { getErrorMessage } from '../../utils/cloud';
 import { buildCategoryGroups, type CategoryGroup } from '../../utils/ingredient-group';
@@ -31,6 +32,9 @@ const CATEGORY_VALUES: readonly IngredientCategoryCode[] = INGREDIENT_CATEGORIES
   (item) => item.value,
 );
 const CATEGORY_LABELS: readonly string[] = INGREDIENT_CATEGORIES.map((item) => item.label);
+
+/** nutrition 云函数一次最多接受 100 种食材，超出就分批请求 */
+const CALORIE_BATCH_SIZE = 100;
 
 /** 数量输入：允许小数（0.5 kg），非法输入返回 null */
 function parseQuantity(raw: string): number | null {
@@ -77,6 +81,10 @@ Page({
     warningCount: 0,
     /** 分类折叠状态：code → 是否折叠 */
     collapsedMap: {} as Record<string, boolean>,
+    /** 「食材 _id → 热量(kcal)」，来自 nutrition 云函数；只用于展示 */
+    calorieMap: {} as Record<string, number>,
+    /** 加载序号：只有最新一次加载的结果才允许写回，防止过期响应覆盖新数据 */
+    loadSeq: 0,
 
     unitLabels: UNIT_LABELS,
     categoryLabels: CATEGORY_LABELS,
@@ -127,6 +135,7 @@ Page({
         loading: false,
         ingredients: [],
         groups: [],
+        calorieMap: {},
         error: '',
       });
       return;
@@ -149,6 +158,7 @@ Page({
         loading: false,
         ingredients: [],
         groups: [],
+        calorieMap: {},
         error: '',
       });
       return;
@@ -156,10 +166,31 @@ Page({
 
     this.setData({ authReady: true, isLoggedIn: true, loading: true, error: '' });
 
+    const seq = this.data.loadSeq + 1;
+    this.setData({ loadSeq: seq });
+
     try {
-      const list = await ingredientService.list(familyId);
-      this.applyList(list || [], true);
+      const list = (await ingredientService.list(familyId)) || [];
+      if (seq !== this.data.loadSeq) {
+        return;
+      }
+
+      // 先渲染库存，热量随后补上：多等一次云函数不应该拖慢列表
+      this.applyList(list, true);
+
+      if (list.length > 0) {
+        const calorieMap = await this.fetchCalorieMap(list, familyId);
+        if (seq !== this.data.loadSeq) {
+          return;
+        }
+        if (Object.keys(calorieMap).length > 0) {
+          this.applyList(list, false, calorieMap);
+        }
+      }
     } catch (error) {
+      if (seq !== this.data.loadSeq) {
+        return;
+      }
       // 网络异常：保留已有列表，仅提示错误，不清空
       this.setData({
         loading: false,
@@ -170,9 +201,70 @@ Page({
     }
   },
 
-  /** 用最新列表重建分组视图 */
-  applyList(list: Ingredient[], markReady: boolean) {
-    const groups = buildCategoryGroups(list, this.data.collapsedMap);
+  /**
+   * 用 nutrition 云函数算出的单项热量。
+   *
+   * 营养值必须由服务端根据 nutrition_facts 计算（见规范第 5 章），
+   * 前端不做任何营养换算，只把结果挂到对应食材上。
+   * 拿不到就返回空映射 —— 热量只是锦上添花，不能影响库存列表本身。
+   */
+  async fetchCalorieMap(list: Ingredient[], familyId: string): Promise<Record<string, number>> {
+    const map: Record<string, number> = {};
+    // 服务端只认 name/amount/unit，且 amount 必须 > 0
+    const usable = list.filter(
+      (item) => (item.standardName || item.name) && item.quantity > 0 && !!item.unit,
+    );
+    if (usable.length === 0) {
+      return map;
+    }
+
+    for (let start = 0; start < usable.length; start += CALORIE_BATCH_SIZE) {
+      const chunk = usable.slice(start, start + CALORIE_BATCH_SIZE);
+      try {
+        const result = await nutritionService.calculate(
+          chunk.map((item) => ({
+            name: item.standardName || item.name,
+            amount: item.quantity,
+            unit: item.unit,
+          })),
+          1,
+          familyId,
+        );
+        // items 与入参顺序一一对应
+        const items = (result && result.items) || [];
+        for (let i = 0; i < chunk.length && i < items.length; i += 1) {
+          const nutrition = items[i].nutrition;
+          if (nutrition && nutrition.calories > 0) {
+            map[chunk[i]._id] = nutrition.calories;
+          }
+        }
+      } catch (error) {
+        // 某一批失败就不再继续请求，直接使用已拿到的部分
+        break;
+      }
+    }
+
+    return map;
+  },
+
+  /**
+   * 用最新列表重建分组视图。
+   *
+   * calorieMap 省略时沿用已有映射（例如仅切换折叠状态），
+   * 避免上一次拿到的热量在局部刷新时被清掉。
+   */
+  applyList(
+    list: Ingredient[],
+    markReady: boolean,
+    calorieMap?: Record<string, number>,
+  ) {
+    const effectiveCalories = calorieMap === undefined ? this.data.calorieMap : calorieMap;
+    const groups = buildCategoryGroups(
+      list,
+      this.data.collapsedMap,
+      new Date(),
+      effectiveCalories,
+    );
 
     let warningCount = 0;
     for (const group of groups) {
@@ -186,6 +278,7 @@ Page({
       groups: groups,
       ingredientCount: list.length,
       warningCount: warningCount,
+      calorieMap: effectiveCalories,
       error: '',
     };
     if (markReady) {
@@ -225,7 +318,7 @@ Page({
     const collapsedMap = Object.assign({}, this.data.collapsedMap);
     collapsedMap[code] = !collapsedMap[code];
     this.setData({ collapsedMap: collapsedMap });
-    this.applyList(this.data.ingredients, false);
+    this.applyList(this.data.ingredients, false, this.data.calorieMap);
   },
 
   /* ------------------------------ 表单 ------------------------------ */

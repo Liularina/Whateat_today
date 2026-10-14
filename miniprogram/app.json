@@ -16,6 +16,7 @@
     "pages/family/create",
     "pages/family/join",
     "pages/family/settings",
+    "pages/shopping/index",
     "pages/mine/index"
   ],
   "window": {

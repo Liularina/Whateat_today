@@ -625,9 +625,9 @@ async function runFailureTests() {
   }
   checkEqual('写尝试没有改变库内容', store.recipes.length, BUILTIN_RECIPES.length);
 
-  /* ---------- 后续阶段的动作仍是未实现 ---------- */
+  /* ---------- Phase D：generateRecipe 已实现，缺参返回 INVALID_PARAMS ---------- */
   const gen = await callRecipe('generateRecipe', { menuId: 'm1' });
-  checkEqual('generateRecipe 仍未实现', gen.code, 'NOT_IMPLEMENTED');
+  checkEqual('generateRecipe 缺少 familyId', gen.code, 'INVALID_PARAMS');
 
   /* ---------- ping 与日志 ---------- */
   const ping = await callRecipe('ping', {});

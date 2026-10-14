@@ -10,6 +10,10 @@
     "verify:nutrition": "node tools/verify-nutrition.js",
     "verify:recipe": "node tools/verify-recipes.js",
     "verify:history": "node tools/verify-history.js",
+    "verify:ai": "node tools/verify-ai.js",
+    "verify:cookbook": "node tools/verify-cookbook.js",
+    "verify:diet": "node tools/verify-diet.js",
+    "verify:shopping": "node tools/verify-shopping.js",
     "e2e:nutrition": "node tools/e2e-nutrition.js"
   },
   "dependencies": {

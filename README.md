@@ -2,7 +2,7 @@
 
 帮一个家庭完成「录入库存 → 推荐菜单 → 家人点菜 → 确认菜单 → 生成做法」的完整闭环。
 
-> 当前进度：**Phase 11：历史记录**。
+> 当前进度：**Phase E：采购闭环（采购清单 + 过敏原/忌口硬过滤 + 体验优化）**。
 > 微信登录（Phase 2）、家庭体系（Phase 3）、食材库存增删改查（Phase 4）、
 > 营养估算（Phase 5）、基础菜谱库（Phase 6）、AI 智能推荐（Phase 7）、
 > 菜单换菜与锁定（Phase 8）、家庭点单（Phase 9）、AI 菜谱与烹饪步骤（Phase 10）、
@@ -36,9 +36,10 @@ cloudfunctions/
 ├── auth/ family/ ingredient/
 ├── nutrition/               # index.js + nutrition-core.js（纯函数）+ nutrition-data.js（基础数据）
 ├── recipe/                  # index.js + openai-compatible-client.js（菜谱库 + AI 生成做法）
-├── ai-config/               # index.js + openai-compatible-client.js（用户自配 API）
-├── menu/                    # index.js + openai-compatible-client.js（菜单保存/锁定/换菜/确认）
+├── ai-config/               # index.js + openai-compatible-client.js + ai-service.js（AI 统一入口 + 模式路由 + 额度）
+├── menu/                    # index.js + openai-compatible-client.js + ai-service.js（菜单保存/锁定/换菜/确认）
 ├── order/                   # index.js（创建点单/提交选择/汇总/关闭）
+├── recommend/               # index.js + openai-compatible-client.js + ai-service.js（推荐 3 套菜单）
 └── recommend/ menu/
 tools/                       # 本地验证套件（内存版云开发，不依赖真实云环境）
 ```
@@ -258,6 +259,75 @@ tools/                       # 本地验证套件（内存版云开发，不依�
   「做法」（跳转菜谱页并按食材名预填关键词）。
 - **推荐排除过期食材**：`cloudfunctions/recommend/shelf-filter.js` 在构建库存名单前
   过滤掉到期日早于北京时间当天的食材；当天到期仍参与推荐，未填到期日不受影响。
+- **列表直接显示卡路里**：每项食材名旁展示「约 N kcal」（该食材全部数量的合计估值）。
+  数值由 `nutrition` 云函数按 `nutrition_facts` 算出，前端**不养第二份营养表、不做任何换算**；
+  超过 100 种食材时分批请求。拿不到热量时只隐藏该数字，不影响库存列表。
+- **表单面板**：`scroll-view` 必须给显式高度约束（`max-height`），否则内容会先把弹层撑高，
+  把底部的保存 / 删除按钮顶出可视区域。
+
+## 统一 AI 服务（Phase C）
+
+Phase C 将「内置 AI」（开箱即用）加入项目，与已有的用户自配 API 平级，通过统一入口路由。
+
+### 两种模式
+
+| 模式 | 凭据来源 | 存储位置 | 说明 |
+|------|---------|---------|------|
+| `builtin` | 云函数环境变量 | 不落库（明文，服务端内存） | 默认模式，开箱即用 |
+| `custom` | 用户在 AI 设置页填写 | `user_ai_configs`（AES-256-GCM 密文） | Phase 7 已有，保留不变 |
+
+### 内置通道
+
+- **凭据**：`AI_BUILTIN_ENABLED` / `AI_BUILTIN_BASE_URL` / `AI_BUILTIN_MODEL` / `AI_BUILTIN_API_KEY`
+  四个环境变量。三件套（URL + 模型 + Key）缺一不可，未配置时 `fail closed`。
+- **每日额度**：`AI_BUILTIN_DAILY_QUOTA` 控制每用户每日调用上限（默认 20，钳制在 1~1000）。
+  按「北京时间自然日」重置。采用原子条件更新（`count < quota` 时才 +1），防止并发绕过。
+- **用量日志**：每次调用写入 `ai_logs` 集合（脱敏），同时输出 console.log；集合缺失不影响调用。
+
+### 模式切换
+
+- **默认模式**：内置（首次使用无需任何配置）。
+- **切换入口**：AI 设置页顶部提供两个选项卡，选中即切。
+- **切到自定义前**：必须已有保存过的 API 配置（否则每次调用都失败，无法排查）。
+- **删除自定义配置时**：服务端自动把模式退回内置。
+- **内置未就绪 / 额度耗尽**：返回明确的中文提示，引导用户配置自己的 API。
+
+### 统一入口
+
+- `ai-service.js`（4 个 AI 云函数各一份，SHA256 一致）提供 `resolveAiCall` / `runAiCall`。
+- `resolveAiCall(db, userId)` 按用户偏好选择模式 → 检查额度 → 返回 `aiConfig`（内置走环境变量明文，
+  自定义走密文）。
+- `runAiCall(db, userId, options, fn)` 在 `resolveAiCall` 基础上包装调用、计时、记日志。
+- `menu` / `recipe` / `recommend` 三个 AI 云函数全部通过 `runAiCall` 发调用，不再各自直连
+  `user_ai_configs`。
+
+### 安全
+
+- 内置 API Key **只在 `getBuiltinConfig` 的返回值中出现一次**，不经过日志、不进数据库、
+  不进任何响应体；`getBuiltinStatus()` 返回值不含凭据、供应商 Base URL、模型名。
+- `user_ai_prefs` 集合只存模式偏好（`builtin` / `custom`），与 `user_ai_configs` 的凭据行解耦。
+- 客户端传入的任何字段（`apiKey` / `baseUrl` / `encryptedApiKey` / ……）都无法覆盖服务端构造的
+  `aiConfig` —— `resolveAiCall` 只以服务端数据为准。
+
+### 集合
+
+| 集合 | 用途 |
+|------|------|
+| `user_ai_prefs` | 用户 AI 模式偏好（`builtin` / `custom`），与凭据行解耦 |
+| `ai_usage` | 内置额度计数器，`_id = userId_日期` 保证同日同用户只有一行 |
+| `ai_logs` | AI 调用日志（脱敏），每次调用写一行 |
+
+### 部署
+
+1. **创建数据库集合**：`user_ai_prefs`、`ai_usage`、`ai_logs`（如已存在则跳过）
+2. **设置环境变量**（在需要使用内置 AI 的云函数上配置）：
+   - `AI_BUILTIN_ENABLED=true`
+   - `AI_BUILTIN_BASE_URL=https://your-vendor.example.com/v1`
+   - `AI_BUILTIN_MODEL=your-model-name`
+   - `AI_BUILTIN_API_KEY=sk-xxxxxxxx`
+   - `AI_BUILTIN_DAILY_QUOTA=20`（可选，默认 20）
+3. 上传 `ai-config` / `menu` / `recipe` / `recommend` 四个云函数（含 `ai-service.js` 与 `openai-compatible-client.js`）
+4. **验证**：`npm run verify:ai`（108 项全部通过即就绪）
 
 ## 营养计算（Phase 5）
 
@@ -580,7 +650,59 @@ Phase 9 实现家庭点单闭环：从已确认菜单发起点单 → 家庭成�
 
 ### 本阶段不做
 
-营养趋势、周报月报、消费统计、采购清单、评分评论、历史菜单一键复制。
+营养趋势、周报月报、消费统计、评分评论、历史菜单一键复制。
+
+## 采购闭环（Phase E）
+
+Phase E 补齐从菜单到采买的最后一公里，并引入过敏原 / 忌口硬过滤作为安全约束。
+
+### E1：采购清单
+
+- **云函数**：`shopping`，三个 action —— `generateShoppingList` / `getShoppingList` / `toggleShoppingItem`
+- **聚合核心**：`cloudfunctions/shopping/shopping-core.js`（纯函数，无云开发依赖）
+  - 按菜单人数等比缩放菜品食材用量
+  - 汇总同一食材同一单位，kg 归一化为 g
+  - 扣减当前家庭库存，得出待购量与已备齐标记
+  - 按食材分类分组，分类优先 → 待购优先排序
+- **数据集合**：`shopping_lists`（每菜单一份，含 items + 勾选状态）
+- **安全**：
+  - 身份只取 `cloud.getWXContext().OPENID`，经 `requireFamilyMember` 复核
+  - 生成时校验菜单归属 + 已确认状态
+  - 读取时按 menuId 校验菜单属于该家庭（防跨家庭数据泄露）
+  - 清单内容全部由服务端按菜单与库存推导，不信任客户端提交的采购项
+- **前端（E1/E3）**：
+  - 新增 `pages/shopping/index`（ts/wxml/wxss/json）
+  - 新增 `miniprogram/services/shopping.ts`、`miniprogram/types/shopping.ts`
+  - 菜单详情页（已确认时）显示「采购清单 」入口
+  - 按分类分组展示，每项显示需要量 / 库存量 / 待购量
+  - 勾选状态持久化（乐观更新 + 失败回滚）
+  - 「重新生成」按最新库存刷新并保留勾选
+  - 「复制清单」一键生成纯文本到剪贴板
+
+### E2：过敏原 / 忌口硬过滤
+
+- **纯函数模块**：`cloudfunctions/recommend/diet-filter.js`（menu 目录存字节一致副本）
+- **关键词表**：
+  - 8 组常见过敏原（花生/鸡蛋/牛奶/大豆/小麦/坚果/鱼类/甲壳类），每组对应菜谱中常见食材关键词
+  - 6 组忌口标签扩充（海鲜/肉/猪肉/鸡肉/辣），标签经前缀剥离后匹配
+  - 子串匹配菜名 + 每个食材名，命中的 recipeId 从候选列表排除
+- **接入点**：
+  - `recommend` 云函数 `recommendMenus`：候选列表先用硬过滤筛掉过敏/忌口菜谱，AI 提示词也写入禁止指令，AI 结果再做一次兜底复核
+  - `menu` 云函数 `replaceMenuItem` / `regenerateUnlockedItems`：换菜候选同样按家庭偏好过滤
+- **安全**：偏好只读取服务端 `families.preferences`，不信任客户端参数
+
+### E3：体验优化
+
+- 采购清单勾选状态持久化（跨家庭成员共享）
+- 一键复制清单文本
+- 空状态 / 加载态 / 错误态完整覆盖
+- 刷新时保留已有勾选（按 key 匹配）
+
+### 本阶段不做
+
+- 不新建 TabBar 入口（采购清单从菜单详情进入）
+- 不在前端展示或编辑过敏原 / 忌口标签（偏好设置留给家庭设置页后续迭代）
+- 不根据勾选自动更新库存
 
 ## 校验命令
 
@@ -591,6 +713,10 @@ npm run verify:ingredient  # 食材库存静态结构 + 云函数行为验证（
 npm run verify:nutrition   # 营养计算静态结构 + 云函数行为验证（212 项断言）
 npm run verify:recipe      # 基础菜谱库静态结构 + 云函数行为验证（170 项断言）
 npm run verify:history     # 历史菜单 / 历史点单静态结构 + 云函数行为验证（85 项断言）
+npm run verify:ai          # 统一 AI 服务静态结构 + 云函数行为验证（108 项断言）
+npm run verify:cookbook     # 家庭菜谱库静态结构 + 云函数行为验证（91 项断言）
+npm run verify:diet         # 过敏原 / 忌口硬过滤静态结构与纯函数验证（94 项断言）
+npm run verify:shopping     # 采购清单静态结构 + 云函数行为验证（118 项断言）
 ```
 
 `verify:*` 用内存版 `wx-server-sdk`（`tools/mock-cloud.js`）驱动**真实的云函数代码**，不依赖云环境，
@@ -608,6 +734,19 @@ npm run verify:history     # 历史菜单 / 历史点单静态结构 + 云函数
 新增菜单后旧历史仍在 / 集合缺失降级 / 菜单详情家庭归属强制校验 /
 历史点单列表与详情 / 已关闭订单只读且幂等 / 汇总来自服务端（含昵称）/
 不暴露 openid / 不存在的点单返回 ORDER_NOT_FOUND 等场景。
+`verify:ai` 覆盖 4 份 client / ai-service 字节一致 / 内置通道 fail closed /
+凭据不泄露 / 额度的原子性并发与北京日切 / 模式路由与默认值 /
+客户端传入任何字段都无法覆盖服务端构造的 aiConfig / 用量日志持久化与脱敏等场景。
+`verify:cookbook` 覆盖 family_cookbook 与 cookbook_versions 数据模型 /
+缓存命中 / 版本递增 / 编辑覆盖当前版本 / 重试产生新版本 / 列表分页 /
+跨家庭权限隔离 / 集合缺失降级等场景。
+`verify:diet`（Phase E2）覆盖两份 diet-filter 字节一致 / 关键词映射全覆盖 /
+前缀剥离 / 规则生成 / 菜名+食材两层匹配 / kept/blocked 分组 / 空偏好降级 /
+内置菜谱实际命中验证等场景。
+`verify:shopping`（Phase E1/E3）覆盖 shopping_lists 数据模型 /
+shopping-core 纯函数（用量缩放/库存扣减/分类/KG 换算/勾选迁移）/
+生成/读取/勾选/刷新保留勾选 / 权限隔离与跨家庭防泄露 /
+集合缺失降级 / 入参校验 / 响应信封等场景。
 加 `-- --quiet` 可只看小节标题、失败项与总计。
 
 云函数改完后建议额外做一次纯语法检查：
@@ -620,6 +759,11 @@ node --check cloudfunctions/nutrition/nutrition-core.js
 node --check cloudfunctions/nutrition/nutrition-data.js
 node --check cloudfunctions/recipe/index.js
 node --check cloudfunctions/recipe/recipe-data.js
+node --check cloudfunctions/recipe/seed-recipes.js
+node --check cloudfunctions/ai-config/ai-service.js
+node --check cloudfunctions/menu/ai-service.js
+node --check cloudfunctions/recipe/ai-service.js
+node --check cloudfunctions/recommend/ai-service.js
 node --check cloudfunctions/recipe/seed-recipes.js
 node --check cloudfunctions/menu/index.js
 node --check cloudfunctions/order/index.js

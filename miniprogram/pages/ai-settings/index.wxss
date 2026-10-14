@@ -1,3 +1,105 @@
+/* ============================== AI 模式选择 ============================== */
+
+.mode-card {
+  margin-bottom: 8rpx;
+}
+
+.mode-card__title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+  margin-bottom: 20rpx;
+}
+
+.mode-row {
+  display: flex;
+  gap: 20rpx;
+}
+
+.mode-pill {
+  flex: 1;
+  padding: 20rpx;
+  border: 2rpx solid #e8e0d8;
+  border-radius: 16rpx;
+  text-align: center;
+  position: relative;
+}
+
+.mode-pill--active {
+  border-color: #ff7a45;
+  background: #fff7ef;
+}
+
+.mode-pill__label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.mode-pill__desc {
+  font-size: 22rpx;
+  color: var(--wte-text-weak);
+  margin-top: 4rpx;
+}
+
+.mode-pill__badge {
+  position: absolute;
+  top: -8rpx;
+  right: -4rpx;
+  padding: 2rpx 12rpx;
+  background: #ff7a45;
+  color: #fff;
+  font-size: 20rpx;
+  border-radius: 20rpx;
+}
+
+.mode-pill__loading {
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  margin-top: 12rpx;
+}
+
+.mode-info {
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  background: #faf6f0;
+  border-radius: 12rpx;
+}
+
+.mode-info__row {
+  font-size: 24rpx;
+  color: var(--wte-text);
+  line-height: 1.8;
+}
+
+.mode-info__hint {
+  font-size: 22rpx;
+  color: #d95f2f;
+  margin-top: 8rpx;
+}
+
+/* 表单卡片内的区块头部 */
+.card__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.card__section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.card__section-toggle {
+  font-size: 26rpx;
+  color: #ff7a45;
+}
+
+/* ============================== 原有样式 ============================== */
+
 .saved-banner {
   padding: 20rpx 28rpx;
   border-radius: 16rpx;

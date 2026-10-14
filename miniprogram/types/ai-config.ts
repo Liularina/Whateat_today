@@ -1,12 +1,34 @@
 /**
- * AI 配置相关类型（Phase 7）
+ * AI 配置相关类型（Phase 7 / Phase C）
  *
- * 用户自定义模型 API 配置：
- *   - 数据存入 user_ai_configs 集合
- *   - API Key 仅以 AES-256-GCM 密文存储，前端不感知
+ * 两种模式（Phase C 新增）：
+ *   builtin —— 平台内置 AI，开箱即用，无需用户配置；
+ *   custom  —— 用户自配 OpenAI 兼容 API，Key 以 AES-256-GCM 密文存 user_ai_configs。
+ *
+ * API Key 仅以密文存储，前端不感知；内置通道凭据只存在于云函数环境变量。
  */
 import type { MealType } from './menu';
 import type { RecipeIngredient } from './recipe';
+
+/** AI 服务模式 */
+export type AiMode = 'builtin' | 'custom';
+
+/** 内置 AI 通道对外状态（服务端不会返回 Base URL / 模型名 / 凭据） */
+export interface AiBuiltinStatus {
+  /** 是否开启（服务端环境变量控制） */
+  enabled: boolean;
+  /** 是否已配齐凭据，可实际调用 */
+  ready: boolean;
+  /** 每用户每日调用上限 */
+  dailyQuota: number;
+}
+
+/** 内置 AI 今日额度（按北京时间自然日） */
+export interface AiQuotaInfo {
+  dailyQuota: number;
+  used: number;
+  remaining: number;
+}
 
 /** ai-config 云函数 getAiConfig 返回 */
 export interface AiConfigInfo {
@@ -14,6 +36,12 @@ export interface AiConfigInfo {
   baseUrl: string;
   model: string;
   maskedApiKey: string;
+  /** 当前生效的 AI 模式 */
+  mode: AiMode;
+  /** 内置通道状态 */
+  builtin: AiBuiltinStatus;
+  /** 今日内置额度 */
+  quota: AiQuotaInfo;
 }
 
 /** ai-config 云函数 saveAiConfig 入参 */
@@ -26,6 +54,10 @@ export interface AiConfigInput {
 /** ai-config 云函数 deleteAiConfig 返回 */
 export interface AiConfigDeleteResult {
   deleted: boolean;
+  /** 若因删除配置而把模式退回内置，这里是退回后的模式；否则为 null */
+  mode?: AiMode | null;
+  /** 是否发生了模式回退 */
+  modeReset?: boolean;
 }
 
 /** ai-config 云函数 testAiConfig 返回 */

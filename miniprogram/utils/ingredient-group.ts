@@ -4,6 +4,7 @@
  * 纯函数，不依赖 wx API，便于复用与测试。
  */
 import { INGREDIENT_CATEGORIES, getCategoryEmoji, getCategoryLabel } from '../constants/categories';
+import { KCAL_PREFIX } from '../constants/config';
 import type { Ingredient, IngredientCategoryCode } from '../types/ingredient';
 import { getShelfLifeStatus, type ShelfLifeStatusCode } from './shelf-life';
 
@@ -30,6 +31,8 @@ export interface IngredientView {
   isExpired: boolean;
   /** 临期（剩余天数 ≤ 3，含今天到期） */
   isWarning: boolean;
+  /** 估算卡路里展示文案，如「约 45 kcal」；无数据时为空字符串 */
+  calorieText: string;
   remark: string;
 }
 
@@ -62,7 +65,26 @@ const VALID_CATEGORIES: Record<string, boolean> = INGREDIENT_CATEGORIES.reduce(
   {} as Record<string, boolean>,
 );
 
-export function toIngredientView(item: Ingredient, today: Date = new Date()): IngredientView {
+/**
+ * 卡路里文案。
+ *
+ * 数值来源是 nutrition 云函数根据 nutrition_facts 算出的单项热量（kcal），
+ * 前端只做展示，不自己做任何营养换算。
+ * 键为食材 _id；缺失或非正数时返回空字符串（不展示也不猜）。
+ */
+function buildCalorieText(id: string, calorieMap: Record<string, number>): string {
+  const calories = calorieMap[id];
+  if (typeof calories !== 'number' || !Number.isFinite(calories) || calories <= 0) {
+    return '';
+  }
+  return KCAL_PREFIX + ' ' + Math.round(calories) + ' kcal';
+}
+
+export function toIngredientView(
+  item: Ingredient,
+  today: Date = new Date(),
+  calorieMap: Record<string, number> = {},
+): IngredientView {
   const expireDate = item.expireDate || '';
   const shelf = getShelfLifeStatus(expireDate || null, today);
   const standardName = item.standardName || item.name;
@@ -87,6 +109,7 @@ export function toIngredientView(item: Ingredient, today: Date = new Date()): In
     daysLeft: shelf.daysLeft,
     isExpired: shelf.status === 'expired',
     isWarning: shelf.status === 'warning',
+    calorieText: buildCalorieText(item._id, calorieMap),
     remark: item.remark || '',
   };
 }
@@ -112,16 +135,19 @@ export function sortByShelfLife(views: IngredientView[]): IngredientView[] {
  * 按分类聚合成折叠分组。
  * 分组顺序固定跟随 INGREDIENT_CATEGORIES；空分类不展示；
  * category 不在枚举内的历史数据一律归入「其他」。
+ *
+ * calorieMap 为可选的「食材 _id → 热量(kcal)」，由调用方从服务端结果构建。
  */
 export function buildCategoryGroups(
   items: Ingredient[],
   collapsed: Record<string, boolean> = {},
   today: Date = new Date(),
+  calorieMap: Record<string, number> = {},
 ): CategoryGroup[] {
   const byCategory: Record<string, IngredientView[]> = {};
 
   for (const item of items) {
-    const view = toIngredientView(item, today);
+    const view = toIngredientView(item, today, calorieMap);
     const key = VALID_CATEGORIES[view.category] ? view.category : 'other';
     if (!byCategory[key]) {
       byCategory[key] = [];

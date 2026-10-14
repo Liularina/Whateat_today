@@ -1,0 +1,99 @@
+<view class="page page--with-footer">
+  <loading-state wx:if="{{loading}}" text="正在准备采购清单..." />
+
+  <error-state
+    wx:elif="{{error}}"
+    title="采购清单加载失败"
+    description="{{error}}"
+    retryText="重试"
+    bind:retry="onRetry"
+  />
+
+  <block wx:else>
+    <view class="page-header">
+      <view class="page-header__title">采购清单</view>
+      <view class="page-header__subtitle" wx:if="{{hasList}}">
+        {{mealTypeLabel}} · {{servings}} 人份<text wx:if="{{dateLabel}}"> · {{dateLabel}}</text>
+      </view>
+    </view>
+
+    <empty-state
+      wx:if="{{!hasList}}"
+      emoji="🧺"
+      title="还没有采购清单"
+      description="确认菜单后，就能按菜品食材与现有库存自动生成需要采购的清单"
+      actionText="去看看菜单"
+      bind:action="onGoMenu"
+    />
+
+    <block wx:else>
+      <view class="summary card">
+        <view class="summary__item">
+          <text class="summary__num">{{summary.toBuyCount}}</text>
+          <text class="summary__label">待采购</text>
+        </view>
+        <view class="summary__item">
+          <text class="summary__num">{{summary.inStockCount}}</text>
+          <text class="summary__label">已备齐</text>
+        </view>
+        <view class="summary__item">
+          <text class="summary__num">{{summary.checkedCount}}</text>
+          <text class="summary__label">已勾选</text>
+        </view>
+      </view>
+
+      <view
+        class="group"
+        wx:for="{{groups}}"
+        wx:key="category"
+        wx:for-item="group"
+        wx:for-index="groupIndex"
+      >
+        <view class="group__head">
+          <text class="group__title">{{group.label}}</text>
+          <text class="group__count">
+            {{group.items.length}} 项<text wx:if="{{group.toBuyCount > 0}}"> · 待购 {{group.toBuyCount}}</text>
+          </text>
+        </view>
+
+        <view
+          class="item {{item.checked ? 'item--checked' : ''}} {{item.enough ? 'item--enough' : ''}}"
+          wx:for="{{group.items}}"
+          wx:key="key"
+          wx:for-item="item"
+          wx:for-index="itemIndex"
+          data-key="{{item.key}}"
+          data-group="{{groupIndex}}"
+          data-index="{{itemIndex}}"
+          bindtap="onToggleItem"
+          hover-class="item--hover"
+        >
+          <view class="item__check">{{item.checked ? '✓' : ''}}</view>
+          <view class="item__body">
+            <view class="item__top">
+              <text class="item__name">{{item.name}}</text>
+              <text class="item__amount">{{item.toBuyText}}</text>
+            </view>
+            <view class="item__meta" wx:if="{{item.needText || item.stockText}}">
+              <text>{{item.needText}}</text>
+              <text wx:if="{{item.stockText}}" class="item__stock">{{item.stockText}}</text>
+            </view>
+            <view class="item__dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="footnote">勾选状态会自动保存；库存不足的部分才计入待采购。</view>
+    </block>
+  </block>
+
+  <view class="footer-bar" wx:if="{{!loading && !error && hasList}}">
+    <view class="footer-actions">
+      <view
+        class="wte-btn wte-btn--ghost footer-actions__btn {{regenerating ? 'footer-actions__btn--busy' : ''}}"
+        bindtap="onRegenerate"
+      >重新生成</view>
+      <view class="wte-btn wte-btn--primary footer-actions__btn" bindtap="onCopy">复制清单</view>
+    </view>
+  </view>
+</view>

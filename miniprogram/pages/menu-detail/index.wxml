@@ -38,6 +38,12 @@
       <text class="meta-hint">（点击菜品可查看做法）</text>
     </view>
 
+    <view class="action-bar" wx:if="{{statusLabel === '已确认' || statusLabel === '已完成'}}">
+      <view class="action-bar__btn" bindtap="onOpenShopping" hover-class="action-bar__btn--hover">
+        采购清单 ›
+      </view>
+    </view>
+
     <empty-state wx:if="{{dishes.length === 0}}" emoji="🍱" title="这份菜单没有菜品" />
 
     <view class="dish-list" wx:else>

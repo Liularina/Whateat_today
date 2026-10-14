@@ -32,6 +32,13 @@
   color: var(--wte-text-weak);
 }
 
+.ingredient__calorie {
+  margin-left: 10rpx;
+  font-size: 22rpx;
+  font-weight: 400;
+  color: #d95f2f;
+}
+
 .ingredient__meta {
   margin-top: 6rpx;
   font-size: 24rpx;

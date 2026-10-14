@@ -128,3 +128,25 @@
   color: var(--wte-text-weak);
   line-height: 1.5;
 }
+
+/* 采购清单入口（Phase E1） */
+.action-bar {
+  margin-bottom: 24rpx;
+}
+
+.action-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 16rpx 36rpx;
+  background: linear-gradient(135deg, #fff5eb, #fff0e0);
+  border: 2rpx solid #ffe0c0;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ff7a45;
+  transition: opacity 0.15s;
+}
+
+.action-bar__btn--hover {
+  opacity: 0.75;
+}
