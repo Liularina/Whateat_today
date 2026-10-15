@@ -6,6 +6,7 @@ type StatusFilter = 'all' | 'open' | 'closed';
 
 Page({
   data: {
+    familyReady: false,
     hasFamily: false,
     familyId: '',
     orders: [] as OrderListItem[],
@@ -16,16 +17,54 @@ Page({
     statusFilter: 'all' as StatusFilter,
   },
 
+  _unsubscribeAuth: null as null | (() => void),
+  _unsubscribeFamily: null as null | (() => void),
+
+  onLoad() {
+    const app = getApp<IAppOption>();
+    const authListener = () => { this.applyAuthState(app.getAuthState()); };
+    this._unsubscribeAuth = () => app.offAuthStateChange(authListener);
+    app.onAuthStateChange(authListener);
+
+    const familyListener = () => { this.applyFamilyState(app.getFamilyState()); };
+    this._unsubscribeFamily = () => app.offFamilyStateChange(familyListener);
+    app.onFamilyStateChange(familyListener);
+
+    this.applyAuthState(app.getAuthState());
+    this.applyFamilyState(app.getFamilyState());
+  },
+
+  onUnload() {
+    if (this._unsubscribeAuth) { this._unsubscribeAuth(); this._unsubscribeAuth = null; }
+    if (this._unsubscribeFamily) { this._unsubscribeFamily(); this._unsubscribeFamily = null; }
+  },
+
   onShow() {
     const app = getApp<IAppOption>();
-    const family = app.globalData.family;
-    if (!family || !family._id) {
-      this.setData({ hasFamily: false, loading: false });
+    this.applyAuthState(app.getAuthState());
+    this.applyFamilyState(app.getFamilyState());
+  },
+
+  applyAuthState(_state: unknown) {},
+
+  applyFamilyState(state: import('../../types/family').FamilyState) {
+    this.setData({ familyReady: state.ready });
+    if (!state.ready) return;
+
+    const hasFamily = state.isInFamily && !!state.family;
+    const newId = state.family ? state.family._id : '';
+    this.setData({ hasFamily: hasFamily, familyId: newId });
+
+    if (!hasFamily) {
+      this.setData({ orders: [], loading: false });
       return;
     }
-    this.setData({ hasFamily: true, familyId: family._id, page: 1 });
+
+    this.setData({ page: 1 });
     void this.loadOrders();
   },
+
+  /* 保留原 onShow 废弃，态管理已移入 subscription */
 
   /* ============================== 筛选 ============================== */
 

@@ -39,6 +39,28 @@
   opacity: 0.82;
 }
 
+/* ---------- 食材筛选 ---------- */
+.ingredient-filter {
+  margin-top: 20rpx;
+}
+
+.ingredient-filter__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 10rpx 22rpx;
+  border-radius: 999rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.ingredient-filter__clear {
+  padding-left: 8rpx;
+  color: #d95f2f;
+}
+
 /* ---------- 分类筛选 ---------- */
 .filters {
   display: flex;

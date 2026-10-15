@@ -455,6 +455,36 @@ async function runListTests() {
   const star = await callRecipe('listRecipes', { keyword: '.*' });
   checkEqual('关键词「.*」不会匹配全部', star.data.total, 0);
 
+  /* ---------- 按食材搜索（命中 ingredients[].name） ---------- */
+  const hasIngredient = (recipe, name) =>
+    (recipe.ingredients || []).some((i) => String(i.name).indexOf(name) !== -1);
+
+  const egg = await callRecipe('listRecipes', { ingredient: '鸡蛋' });
+  const eggExpected = BUILTIN_RECIPES.filter((r) => hasIngredient(r, '鸡蛋')).length;
+  check('按食材能搜到菜谱', egg.success === true && egg.data.total > 0);
+  checkEqual('食材「鸡蛋」相关菜谱数与数据一致', egg.data.total, eggExpected);
+  check(
+    '食材搜索结果确实都含该食材',
+    egg.data.items.every((r) => {
+      const src = BUILTIN_RECIPES.find((x) => x.name === r.name);
+      return src && hasIngredient(src, '鸡蛋');
+    }),
+  );
+
+  const noIng = await callRecipe('listRecipes', { ingredient: '不存在的食材' });
+  checkEqual('食材不存在时返回空列表', noIng.data.items.length, 0);
+  checkEqual('食材不存在时 total 为 0', noIng.data.total, 0);
+
+  const eggAndKw = await callRecipe('listRecipes', { ingredient: '鸡蛋', keyword: '番茄' });
+  check('食材与关键词叠加有结果', eggAndKw.success === true && eggAndKw.data.total > 0);
+  check(
+    '食材与关键词叠加取交集（菜名含关键词）',
+    eggAndKw.data.items.every((r) => r.name.indexOf('番茄') !== -1),
+  );
+
+  const longIng = await callRecipe('listRecipes', { ingredient: new Array(22).join('菜') });
+  check('食材关键词超过 20 字被拒', longIng.success === false && longIng.code === 'INVALID_PARAMS');
+
   /* ---------- 只返回启用的内置菜谱 ---------- */
   store.recipes.push({
     _id: 'disabled-1',

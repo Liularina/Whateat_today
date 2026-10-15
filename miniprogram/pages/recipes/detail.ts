@@ -58,6 +58,10 @@ Page({
     generatedTips: [] as string[],
     generatedSafety: [] as string[],
     generateError: '',
+
+    /* Phase D：是否已保存到家庭菜谱库 */
+    savedToCookbook: false,
+    cookbookId: '',
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -144,12 +148,22 @@ Page({
     this.setData({ generating: true, generateError: '' });
 
     try {
-      const result = await recipeService.generateCookingSteps(this.data.recipeId, this.data.servings);
+      const app = getApp<IAppOption>();
+      const familyId = app.globalData.currentFamilyId || '';
+      const result = await recipeService.generateCookingSteps(
+        this.data.recipeId,
+        this.data.servings,
+        undefined,
+        familyId,
+      );
 
       const gen = result.data;
+      const saved = !!result.cookbookId;
       this.setData({
         generating: false,
         generatedData: gen,
+        savedToCookbook: saved,
+        cookbookId: result.cookbookId || '',
         generatedIntro: gen.introduction || '',
         generatedIngredients: (gen.ingredients || []).map(toIngredientView),
         generatedSteps: (gen.steps || []).map((s, i) => ({
@@ -162,7 +176,7 @@ Page({
         generatedSafety: gen.safetyNotes || [],
       });
 
-      wx.showToast({ title: '做法已生成', icon: 'success' });
+      wx.showToast({ title: saved ? '已保存到我的菜谱' : '做法已生成', icon: 'success' });
     } catch (error) {
       this.setData({
         generating: false,
@@ -177,5 +191,10 @@ Page({
 
   onGoSettings() {
     wx.navigateTo({ url: '/pages/ai-settings/index' });
+  },
+
+  /** Phase D：查看家庭菜谱库 */
+  onGoCookbook() {
+    wx.navigateTo({ url: '/pages/cookbook/index' });
   },
 });

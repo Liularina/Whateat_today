@@ -1,0 +1,85 @@
+<loading-state wx:if="{{loading}}" text="正在加载做法..." />
+
+<block wx:elif="{{notFound}}">
+  <view class="page">
+    <empty-state emoji="🍽️" title="该菜谱不存在" description="可能已被删除或移出我的菜谱" actionText="返回" bind:action="onBack" />
+  </view>
+</block>
+
+<error-state wx:elif="{{error}}" title="做法加载失败" description="{{error}}" bind:retry="onRetry" />
+
+<view class="page" wx:else>
+  <view class="page-header">
+    <view class="page-header__title">{{name}}</view>
+    <view class="page-header__subtitle">{{sourceLabel}} · 第 {{version}} 版</view>
+  </view>
+
+  <view class="meta-card">
+    <view class="meta-card__row">
+      <view class="meta-item">
+        <view class="meta-item__label">分类</view>
+        <view class="meta-item__value">{{category}}</view>
+      </view>
+      <view class="meta-item">
+        <view class="meta-item__label">难度</view>
+        <view class="meta-item__value">{{difficultyLabel}}</view>
+      </view>
+      <view class="meta-item">
+        <view class="meta-item__label">用时</view>
+        <view class="meta-item__value">约 {{cookTime}} 分钟</view>
+      </view>
+      <view class="meta-item">
+        <view class="meta-item__label">人数</view>
+        <view class="meta-item__value">{{servings}} 人份</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card intro" wx:if="{{intro}}">
+    <view class="intro-text">{{intro}}</view>
+  </view>
+
+  <view class="section" wx:if="{{ingredients.length > 0}}">
+    <view class="section__title">食材准备</view>
+    <view class="card">
+      <view class="ing-row" wx:for="{{ingredients}}" wx:key="name">
+        <view class="ing-row__name">{{item.name}}</view>
+        <view class="ing-row__amount">{{item.amountText}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{preparation.length > 0}}">
+    <view class="section__title">准备工作</view>
+    <view class="card">
+      <view class="prep-item" wx:for="{{preparation}}" wx:key="*this">{{item}}</view>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{steps.length > 0}}">
+    <view class="section__title">详细步骤</view>
+    <view class="card">
+      <view class="step" wx:for="{{steps}}" wx:key="step">
+        <view class="step__index">{{item.step}}</view>
+        <view class="step__body">
+          <view class="step__desc">{{item.description}}</view>
+          <view class="step__time" wx:if="{{item.timeText}}">{{item.timeText}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{tips.length > 0}}">
+    <view class="section__title">小贴士</view>
+    <view class="card">
+      <view class="tip-item" wx:for="{{tips}}" wx:key="*this">💡 {{item}}</view>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{safety.length > 0}}">
+    <view class="section__title">安全提示</view>
+    <view class="card">
+      <view class="tip-item" wx:for="{{safety}}" wx:key="*this">⚠️ {{item}}</view>
+    </view>
+  </view>
+</view>

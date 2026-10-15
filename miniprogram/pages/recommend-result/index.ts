@@ -1,5 +1,6 @@
 import { DIFFICULTY_LABELS } from '../../constants/config';
 import type { RecommendMenusResult, RecommendMenuView, RecommendRecipeView, SavedMenuItem } from '../../types/ai-config';
+import { ingredientService } from '../../services/ingredient';
 import { menuService } from '../../services/menu';
 import { orderService } from '../../services/order';
 import { getErrorCode, getErrorMessage } from '../../utils/cloud';
@@ -21,9 +22,17 @@ interface MenuViewModel {
   reason: string;
   totalCookTime: string;
   dishes: DishViewModel[];
+  /** 库存覆盖情况 */
+  missingIngredients: string[];
+  missingText: string;
+  coverageText: string;
+  fullyCovered: boolean;
+  /** 该套菜单的缺料是否已加入库存 */
+  addedToInventory: boolean;
 }
 
 function toMenuView(menu: RecommendMenuView): MenuViewModel {
+  const missing = menu.missingIngredients || [];
   return {
     title: menu.title,
     reason: menu.reason,
@@ -39,6 +48,13 @@ function toMenuView(menu: RecommendMenuView): MenuViewModel {
       tagsText: (item.tags || []).join(' · '),
       locked: false,
     })),
+    missingIngredients: missing,
+    missingText: missing.join('、'),
+    coverageText: missing.length === 0
+      ? '现有食材即可完成'
+      : '还需 ' + missing.length + ' 种食材',
+    fullyCovered: missing.length === 0,
+    addedToInventory: false,
   };
 }
 
@@ -79,6 +95,9 @@ Page({
     errorMessage: '',
     savingMenu: false,
 
+    /** 正在把缺料加入库存的菜单下标，-1 表示空闲 */
+    addingIndex: -1,
+
     /** 防止与确认态交互 */
     confirmed: false,
   },
@@ -104,6 +123,59 @@ Page({
       menuCount: result.menus.length,
       menus: result.menus.map(toMenuView),
     });
+  },
+
+  /* ============================== 缺料加入库存 ============================== */
+
+  /**
+   * 把某套菜单「还需采购」的食材一次性加入家庭食材库。
+   * 数量与单位无法从菜谱推断，统一按「1 个」入库，由用户在食材页再调整用量。
+   */
+  async onAddMissingToInventory(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.addingIndex !== -1) return;
+
+    const index = Number(e.currentTarget.dataset.index);
+    const menu = this.data.menus[index];
+    if (!menu || menu.missingIngredients.length === 0) return;
+
+    const family = getApp<IAppOption>().globalData.family;
+    if (!family || !family._id) {
+      wx.showToast({ title: '请先创建或加入家庭', icon: 'none' });
+      return;
+    }
+
+    this.setData({ addingIndex: index });
+
+    try {
+      const result = await ingredientService.createMany(
+        family._id,
+        menu.missingIngredients.map((name) => ({
+          name: name.slice(0, 20),
+          quantity: 1,
+          unit: '个' as const,
+          category: 'other' as const,
+          remark: 'AI 推荐菜单缺料',
+        })),
+      );
+
+      // 标记该套菜单已入库，避免重复添加
+      const menus = this.data.menus.map((m, i) =>
+        i === index ? { ...m, addedToInventory: result.created.length > 0 } : m,
+      );
+      this.setData({ addingIndex: -1, menus });
+
+      if (result.failed.length > 0) {
+        wx.showToast({
+          title: '已加入 ' + result.created.length + ' 种，' + result.failed.length + ' 种失败',
+          icon: 'none',
+        });
+      } else {
+        wx.showToast({ title: '已加入 ' + result.created.length + ' 种食材', icon: 'success' });
+      }
+    } catch (error) {
+      this.setData({ addingIndex: -1 });
+      wx.showToast({ title: getErrorMessage(error, '加入食材库失败'), icon: 'none' });
+    }
   },
 
   /* ============================== 选择菜单 → 保存 → 进入交互 ============================== */

@@ -14,7 +14,7 @@
  *   - 新增购买日期 purchaseDate 与保质天数 shelfLifeDays；
  *   - 列表按分类分组折叠，组内临期优先排序；
  *   - 临期（≤3 天）/ 过期 标识；
- *   - 快捷操作：已用完 / 补货 / 查看做法。
+ *   - 快捷操作：消耗（扣减数量）/ 补货（累加数量）/ 查看做法。
  */
 import { INGREDIENT_CATEGORIES } from '../../constants/categories';
 import { UNITS, convertToGram } from '../../constants/units';
@@ -46,6 +46,11 @@ function parseQuantity(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/** 数量保留两位小数，与云函数 roundQuantity 一致，避免浮点误差累积 */
+function roundQuantity(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /** 保质天数输入：只接受非负整数 */
 function parseShelfLifeDays(raw: string): number | null {
   const text = (raw || '').trim();
@@ -64,12 +69,16 @@ Page({
     /** 登录初始化是否结束 */
     authReady: false,
     isLoggedIn: false,
+    /** 家庭态是否已向服务端确认：false 时只展示「正在加载…」，绝不展示「没有家庭」 */
+    familyReady: false,
     /** 食材是否已向服务端确认 */
     ready: false,
     loading: false,
     /** 可直接展示的错误文案（网络异常等） */
     error: '',
     hasFamily: false,
+    /** 上次请求的 familyId：变化时强制刷新缓存 */
+    lastFamilyId: '',
 
     /** 服务端返回的原始列表（分组重建的事实来源） */
     ingredients: [] as Ingredient[],
@@ -111,7 +120,82 @@ Page({
     saving: false,
   },
 
+  /** 取消态订阅句柄 */
+  _unsubscribeAuth: null as null | (() => void),
+  _unsubscribeFamily: null as null | (() => void),
+  /** 食材列表内存缓存：familyId → ingredients[]，避免每次 onShow 都拉取 */
+  _cacheList: null as null | { familyId: string; list: Ingredient[]; map: Record<string, number> },
+
+  onLoad() {
+    const app = getApp<IAppOption>();
+
+    // 订阅态：等到家庭态 ready 后再自动刷新，避免「加载时未就绪就一直白等」
+    const authListener = () => {
+      this.applyAuthState(app.getAuthState());
+    };
+    this._unsubscribeAuth = () => app.offAuthStateChange(authListener);
+    app.onAuthStateChange(authListener);
+
+    const familyListener = () => {
+      this.applyFamilyState(app.getFamilyState());
+    };
+    this._unsubscribeFamily = () => app.offFamilyStateChange(familyListener);
+    app.onFamilyStateChange(familyListener);
+
+    this.applyAuthState(app.getAuthState());
+    this.applyFamilyState(app.getFamilyState());
+  },
+
+  onUnload() {
+    if (this._unsubscribeAuth) { this._unsubscribeAuth(); this._unsubscribeAuth = null; }
+    if (this._unsubscribeFamily) { this._unsubscribeFamily(); this._unsubscribeFamily = null; }
+  },
+
   onShow() {
+    const app = getApp<IAppOption>();
+    this.applyAuthState(app.getAuthState());
+    this.applyFamilyState(app.getFamilyState());
+  },
+
+  applyAuthState(state: import('../../types/user').AuthState) {
+    const data: Record<string, unknown> = { authReady: state.ready, isLoggedIn: state.isLoggedIn };
+    if (!state.isLoggedIn) {
+      // 登出 → 清缓存
+      this._cacheList = null;
+      data.hasFamily = false;
+      data.ready = true;
+      data.ingredients = [];
+      data.groups = [];
+    }
+    this.setData(data);
+    if (state.ready && state.isLoggedIn) {
+      void this.load();
+    }
+  },
+
+  applyFamilyState(state: import('../../types/family').FamilyState) {
+    this.setData({ familyReady: state.ready });
+    if (!state.ready) {
+      return;
+    }
+    // 家庭态已确认：如果没家庭，直接展示引导；有家庭则触发加载
+    if (!state.isInFamily) {
+      this._cacheList = null;
+      this.setData({
+        hasFamily: false,
+        ready: true,
+        loading: false,
+        ingredients: [],
+        groups: [],
+        error: '',
+      });
+      return;
+    }
+    // 有家庭：如果 familyId 变了，失效缓存
+    const newId = state.family ? state.family._id : '';
+    if (this._cacheList && this._cacheList.familyId !== newId) {
+      this._cacheList = null;
+    }
     void this.load();
   },
 
@@ -119,52 +203,33 @@ Page({
   async load() {
     const app = getApp<IAppOption>();
     const auth = app.getAuthState();
+    const familyState = app.getFamilyState();
 
-    if (!auth.ready) {
-      this.setData({ authReady: false, isLoggedIn: auth.isLoggedIn });
+    if (!auth.ready || !familyState.ready) {
+      // 登录或家庭态尚未就绪，不主动发起查询；订阅回调到位后自动重入
       return;
     }
 
     if (!auth.isLoggedIn) {
-      // 未登录时不调用食材接口，只引导登录
-      this.setData({
-        authReady: true,
-        isLoggedIn: false,
-        ready: true,
-        hasFamily: false,
-        loading: false,
-        ingredients: [],
-        groups: [],
-        calorieMap: {},
-        error: '',
-      });
+      return; // applyAuthState 已处理
+    }
+
+    const familyId = familyState.family ? familyState.family._id : '';
+    if (!familyId) {
+      return; // applyFamilyState 已处理
+    }
+
+    // 缓存命中且 familyId 未变：直接复用，跳过云函数调用
+    if (this._cacheList && this._cacheList.familyId === familyId) {
+      const entry = this._cacheList;
+      this.setData({ lastFamilyId: familyId, hasFamily: true });
+      this.applyList(entry.list, true, entry.map);
+      // 后台静默刷新，保证数据最终一致
+      void this.refreshInBackground(familyId);
       return;
     }
 
-    let familyId = app.globalData.currentFamilyId;
-    if (!familyId) {
-      // 可能是首次进入、全局家庭态尚未就绪；主动确认一次，失败不抛
-      await app.refreshFamily();
-      familyId = app.globalData.currentFamilyId;
-    }
-
-    if (!familyId) {
-      // 「没有家庭」是正常业务状态：食材属于家庭，先引导建家
-      this.setData({
-        authReady: true,
-        isLoggedIn: true,
-        ready: true,
-        hasFamily: false,
-        loading: false,
-        ingredients: [],
-        groups: [],
-        calorieMap: {},
-        error: '',
-      });
-      return;
-    }
-
-    this.setData({ authReady: true, isLoggedIn: true, loading: true, error: '' });
+    this.setData({ loading: true, error: '', lastFamilyId: familyId });
 
     const seq = this.data.loadSeq + 1;
     this.setData({ loadSeq: seq });
@@ -175,6 +240,9 @@ Page({
         return;
       }
 
+      // 写入缓存
+      this._cacheList = { familyId, list, map: {} };
+
       // 先渲染库存，热量随后补上：多等一次云函数不应该拖慢列表
       this.applyList(list, true);
 
@@ -184,6 +252,7 @@ Page({
           return;
         }
         if (Object.keys(calorieMap).length > 0) {
+          this._cacheList = { familyId, list, map: calorieMap };
           this.applyList(list, false, calorieMap);
         }
       }
@@ -512,6 +581,7 @@ Page({
     }
 
     const isEdit = this.data.formMode === 'edit';
+    this._cacheList = null;
     this.setData({ saving: true, formError: '' });
 
     try {
@@ -534,79 +604,155 @@ Page({
 
   /* ------------------------------ 快捷操作 ------------------------------ */
 
-  /** 「已用完」：从库存移除（与删除同一套流程，只是语义不同） */
+  /**
+   * 后台静默刷新：不显示 loading，不覆盖已有列表，只在结果不同时更新。
+   * 用于缓存命中后保持数据最终一致。
+   */
+  async refreshInBackground(familyId: string) {
+    try {
+      const list = (await ingredientService.list(familyId)) || [];
+      if (this._cacheList) {
+        this._cacheList = { familyId, list, map: this._cacheList.map };
+      }
+      // 只有列表真的有变化（长度不同）或热量可以补充时才刷新视图
+      const changed = list.length !== this.data.ingredients.length;
+      if (changed || Object.keys(this.data.calorieMap).length === 0) {
+        this.applyList(list, false, this.data.calorieMap);
+        if (list.length > 0 && Object.keys(this.data.calorieMap).length === 0) {
+          void this.fetchCalorieMap(list, familyId).then((calorieMap) => {
+            if (this._cacheList) {
+              this._cacheList = { familyId, list, map: calorieMap };
+            }
+            if (Object.keys(calorieMap).length > 0) {
+              this.applyList(list, false, calorieMap);
+            }
+          });
+        }
+      }
+    } catch (_e) {
+      // 后台刷新失败不报错，不影响已展示的数据
+    }
+  },
+
+  /** 操作后必须清缓存并重新加载（数据已经变更） */
   onConsumeIngredient(e: WechatMiniprogram.CustomEvent) {
     const item = (e.detail && e.detail.item) as Ingredient | undefined;
     if (!item) {
       return;
     }
 
+    const label = (item.standardName || item.name) + '（当前 ' + item.quantity + ' ' + item.unit + '）';
+
     wx.showModal({
-      title: '已用完',
-      content: '把「' + (item.standardName || item.name) + '」从库存移除？',
-      confirmText: '移除',
+      title: '消耗：' + label,
+      editable: true,
+      placeholderText: '用掉的数量',
       success: (res) => {
-        if (res.confirm) {
-          void this.deleteIngredient(item._id, '已用完，已移除');
+        if (!res.confirm) {
+          return;
         }
+        const consume = parseQuantity(res.content || '');
+        if (consume === null || consume <= 0) {
+          wx.showToast({ title: '请输入大于 0 的数量', icon: 'none' });
+          return;
+        }
+        void this.consumeIngredient(item, consume);
       },
     });
   },
 
-  /** 「重新补货」：输入补货后的总数量 */
+  /** 消耗：扣减数量；剩余为 0 或负数时转为移除 */
+  async consumeIngredient(item: Ingredient, consume: number) {
+    const remain = roundQuantity(item.quantity - consume);
+    if (remain <= 0) {
+      const name = item.standardName || item.name;
+      wx.showModal({
+        title: '库存将用完',
+        content: '消耗数量已用完「' + name + '」的库存，是否从库存移除？',
+        confirmText: '移除',
+        success: (res) => {
+          if (res.confirm) {
+            void this.deleteIngredient(item._id, '已用完，已移除');
+          }
+        },
+      });
+      return;
+    }
+    await this.applyQuantityUpdate(item, remain, false, '已消耗');
+  },
+
+  /** 「补货」：输入补货数量，累加到现有库存 */
   onRestockIngredient(e: WechatMiniprogram.CustomEvent) {
     const item = (e.detail && e.detail.item) as Ingredient | undefined;
     if (!item) {
       return;
     }
 
-    const label = (item.standardName || item.name) + '（' + item.quantity + ' ' + item.unit + '）';
+    const label = (item.standardName || item.name) + '（当前 ' + item.quantity + ' ' + item.unit + '）';
 
     wx.showModal({
       title: '补货：' + label,
       editable: true,
-      placeholderText: '补货后的总数量',
+      placeholderText: '补货数量（累加到现有库存）',
       success: (res) => {
         if (!res.confirm) {
           return;
         }
-        const quantity = parseQuantity(res.content || '');
-        if (quantity === null || quantity <= 0) {
+        const add = parseQuantity(res.content || '');
+        if (add === null || add <= 0) {
           wx.showToast({ title: '请输入大于 0 的数量', icon: 'none' });
           return;
         }
-        void this.restockIngredient(item, quantity);
+        void this.restockIngredient(item, add);
       },
     });
   },
 
-  async restockIngredient(item: Ingredient, quantity: number) {
+  async restockIngredient(item: Ingredient, add: number) {
+    this._cacheList = null;
+    const newQuantity = roundQuantity(item.quantity + add);
+    await this.applyQuantityUpdate(item, newQuantity, true, '已补货');
+  },
+
+  /**
+   * 按新数量更新库存。
+   * updatePurchaseDate 为 true 时（补货视为新购）把购买日期重置为今天，
+   * 并相应重算到期日；为 false 时（消耗）保留原购买日期与到期日。
+   */
+  async applyQuantityUpdate(
+    item: Ingredient,
+    newQuantity: number,
+    updatePurchaseDate: boolean,
+    successText: string,
+  ) {
     const app = getApp<IAppOption>();
     const familyId = app.globalData.currentFamilyId;
     if (!familyId) {
       return;
     }
 
+    this._cacheList = null;
+
     const input: IngredientInput = {
       name: item.name,
-      quantity: quantity,
+      quantity: roundQuantity(newQuantity),
       unit: item.unit,
       category: item.category,
-      purchaseDate: toDateString(new Date()),
+      purchaseDate: updatePurchaseDate ? toDateString(new Date()) : (item.purchaseDate || null),
       shelfLifeDays: typeof item.shelfLifeDays === 'number' ? item.shelfLifeDays : null,
       expireDate: typeof item.shelfLifeDays === 'number' ? null : (item.expireDate || null),
       remark: item.remark || '',
     };
 
-    wx.showLoading({ title: '正在补货...', mask: true });
+    wx.showLoading({ title: '正在处理...', mask: true });
     try {
       await ingredientService.update(familyId, item._id, input);
       wx.hideLoading();
-      wx.showToast({ title: '已补货', icon: 'none' });
+      wx.showToast({ title: successText, icon: 'none' });
       await this.load();
     } catch (error) {
       wx.hideLoading();
-      wx.showToast({ title: getErrorMessage(error, '补货失败，请稍后重试'), icon: 'none' });
+      wx.showToast({ title: getErrorMessage(error, '操作失败，请稍后重试'), icon: 'none' });
     }
   },
 
@@ -620,7 +766,8 @@ Page({
     if (!keyword) {
       return;
     }
-    wx.navigateTo({ url: '/pages/recipes/index?keyword=' + encodeURIComponent(keyword) });
+    // 语义是「找包含该食材的菜谱」，走 ingredient 筛选而非菜名 keyword 搜索
+    wx.navigateTo({ url: '/pages/recipes/index?ingredient=' + encodeURIComponent(keyword) });
   },
 
   /** 删除必须二次确认（编辑表单里的删除入口） */
@@ -671,6 +818,7 @@ Page({
       return;
     }
 
+    this._cacheList = null;
     wx.showLoading({ title: '正在处理...', mask: true });
     try {
       await ingredientService.remove(familyId, id);

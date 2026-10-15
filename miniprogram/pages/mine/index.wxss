@@ -48,6 +48,17 @@
   text-align: center;
 }
 
+/* ---------- 资料编辑 ---------- */
+.profile__edit {
+  margin-left: auto;
+  padding: 8rpx 20rpx;
+  font-size: 24rpx;
+  color: var(--wte-brand);
+  border: 2rpx solid var(--wte-brand);
+  border-radius: 999rpx;
+  flex: none;
+}
+
 /* ---------- 当前家庭 ---------- */
 .card {
   background: var(--wte-card);

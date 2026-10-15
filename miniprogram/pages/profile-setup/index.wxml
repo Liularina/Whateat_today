@@ -1,0 +1,52 @@
+<view class="page">
+  <view class="setup-card">
+    <view class="setup-card__title">完善你的资料</view>
+    <view class="setup-card__desc">设置头像和昵称，让家人能认出你</view>
+
+    <!-- 头像：固定正圆容器 + 透明 button 覆盖，避免 button 默认样式撑出椭圆 -->
+    <view class="setup-row setup-row--center">
+      <view class="avatar-wrap">
+        <image
+          class="avatar-wrap__img"
+          src="{{avatarDisplayUrl}}"
+          mode="aspectFill"
+          wx:if="{{avatarDisplayUrl}}"
+        />
+        <view class="avatar-wrap__placeholder" wx:else>
+          <view class="avatar-wrap__icon">📷</view>
+        </view>
+        <button
+          class="avatar-wrap__btn"
+          open-type="chooseAvatar"
+          bindchooseavatar="onChooseAvatar"
+        ></button>
+      </view>
+      <view class="setup-row__tip" wx:if="{{avatarChosen}}">已选择头像</view>
+    </view>
+
+    <!-- 昵称 -->
+    <view class="setup-row">
+      <view class="setup-row__label">昵称</view>
+      <input
+        class="nickname-input"
+        type="nickname"
+        value="{{nickname}}"
+        placeholder="点击这里，可直接选微信昵称"
+        maxlength="20"
+        bindinput="onNicknameInput"
+        bindblur="onNicknameBlur"
+      />
+    </view>
+
+    <view class="setup-error" wx:if="{{error}}">{{error}}</view>
+
+    <view class="setup-actions">
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onSave">
+        {{saving ? '保存中...' : '保存并进入'}}
+      </view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block setup-skip" bindtap="onSkip">
+        稍后设置
+      </view>
+    </view>
+  </view>
+</view>

@@ -100,6 +100,7 @@ function toHistoryView(item: MenuListItem): HistoryMenuView {
 Page({
   data: {
     activeTab: 'today' as MenuTab,
+    familyReady: false,
 
     /* 今日菜单 */
     todayLoading: false,
@@ -129,22 +130,60 @@ Page({
     hasFamily: false,
   },
 
+  _unsubscribeAuth: null as null | (() => void),
+  _unsubscribeFamily: null as null | (() => void),
+  _todayCache: null as null | { familyId: string; menu: Menu | null },
+
+  onLoad() {
+    const app = getApp<IAppOption>();
+    const authListener = () => { this.applyAuthState(app.getAuthState()); };
+    this._unsubscribeAuth = () => app.offAuthStateChange(authListener);
+    app.onAuthStateChange(authListener);
+
+    const familyListener = () => { this.applyFamilyState(app.getFamilyState()); };
+    this._unsubscribeFamily = () => app.offFamilyStateChange(familyListener);
+    app.onFamilyStateChange(familyListener);
+
+    this.applyAuthState(app.getAuthState());
+    this.applyFamilyState(app.getFamilyState());
+  },
+
+  onUnload() {
+    if (this._unsubscribeAuth) { this._unsubscribeAuth(); this._unsubscribeAuth = null; }
+    if (this._unsubscribeFamily) { this._unsubscribeFamily(); this._unsubscribeFamily = null; }
+  },
+
   onShow() {
     const app = getApp<IAppOption>();
-    const family = app.globalData.family;
-    const hasFamily = !!(family && family._id);
+    this.applyAuthState(app.getAuthState());
+    this.applyFamilyState(app.getFamilyState());
+  },
+
+  applyAuthState(_state: unknown) {
+    // 菜单页不要求登录状态展示，由家庭态兜底
+  },
+
+  applyFamilyState(state: import('../../types/family').FamilyState) {
+    this.setData({ familyReady: state.ready });
+    if (!state.ready) return;
+
+    const hasFamily = state.isInFamily && !!state.family;
+    const newId = state.family ? state.family._id : '';
+    if (this._todayCache && this._todayCache.familyId !== newId) {
+      this._todayCache = null;
+    }
 
     this.setData({ hasFamily: hasFamily });
-
     if (!hasFamily) {
-      this.setData({
-        todayMenu: null, historyMenus: [],
-        todayLoading: false, historyLoading: false,
-        calendarDays: [], weekBars: [],
-      });
+      this.setData({ todayMenu: null, historyMenus: [], calendarDays: [], weekBars: [] });
       return;
     }
 
+    // 加载当前激活的 tab
+    this.loadActiveTab();
+  },
+
+  loadActiveTab() {
     if (this.data.activeTab === 'today') {
       void this.loadToday();
     } else if (this.data.activeTab === 'history') {
@@ -158,14 +197,7 @@ Page({
     const tab = e.currentTarget.dataset.tab as MenuTab;
     this.setData({ activeTab: tab });
     if (!this.data.hasFamily) return;
-
-    if (tab === 'today') {
-      void this.loadToday();
-    } else if (tab === 'history') {
-      void this.loadHistory(true);
-    } else {
-      void this.loadCalendarMonth();
-    }
+    this.loadActiveTab();
   },
 
   /* ============================== 今日菜单 ============================== */
@@ -175,9 +207,21 @@ Page({
     const family = app.globalData.family;
     if (!family) return;
 
+    // 缓存命中：直接展示，后台刷新
+    if (this._todayCache && this._todayCache.familyId === family._id) {
+      this.setData({ todayMenu: toTodayView(this._todayCache.menu) });
+      // 后台静默刷新
+      void menuService.getTodayMenu(family._id).then((result) => {
+        this._todayCache = { familyId: family._id, menu: result.menu };
+        this.setData({ todayMenu: toTodayView(result.menu) });
+      }).catch(() => {});
+      return;
+    }
+
     this.setData({ todayLoading: true, todayError: '' });
     try {
       const result = await menuService.getTodayMenu(family._id);
+      this._todayCache = { familyId: family._id, menu: result.menu };
       this.setData({ todayLoading: false, todayMenu: toTodayView(result.menu) });
     } catch (e) {
       this.setData({ todayLoading: false, todayError: getErrorMessage(e, '加载失败') });

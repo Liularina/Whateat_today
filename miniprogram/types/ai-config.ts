@@ -98,6 +98,14 @@ export interface RecommendMenuView {
   recipeIds: string[];
   items: RecommendRecipeView[];
   totalCookTime: number;
+  /** 现有食材覆盖的食材种类数（服务端计算） */
+  inventoryMatchedCount: number;
+  /** 还需额外采购的食材种类数 */
+  missingCount: number;
+  /** 还需额外采购的食材名（服务端根据真实菜谱数据计算，不采信 AI） */
+  missingIngredients: string[];
+  /** 现有库存是否已完全覆盖该菜单 */
+  fullyCovered: boolean;
 }
 
 /** recommend 云函数 recommendMenus 返回 */

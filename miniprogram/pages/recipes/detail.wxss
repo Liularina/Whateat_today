@@ -148,6 +148,19 @@
   margin-top: 40rpx;
 }
 
+/* Phase D：已保存到我的菜谱 */
+.saved-tip {
+  margin-top: 24rpx;
+  padding: 28rpx 32rpx;
+}
+
+.saved-tip__text {
+  display: block;
+  margin-bottom: 20rpx;
+  font-size: 26rpx;
+  color: #2e7d32;
+}
+
 .wte-btn--primary-outline {
   border: 2rpx solid #ff7a45;
   color: #ff7a45;

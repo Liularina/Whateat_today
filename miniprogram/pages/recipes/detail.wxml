@@ -154,6 +154,12 @@
         </view>
       </view>
 
+      <!-- 已保存到我的菜谱 -->
+      <view class="card saved-tip" wx:if="{{savedToCookbook}}">
+        <text class="saved-tip__text">已保存到「我的菜谱」，全家共享这份做法</text>
+        <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onGoCookbook">查看我的菜谱</view>
+      </view>
+
       <!-- 重新生成 -->
       <view class="actions" wx:if="{{aiConfigured}}">
         <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onRegenerateSteps">重新生成</view>

@@ -24,6 +24,8 @@ declare global {
     lastRecommendResult: unknown;
     /** Phase 8：当前正在操作的菜单 ID */
     currentMenuId: string;
+    /** Phase G：首次登录资料设置是否已完成（昵称/头像已非默认值） */
+    profileSetupDone: boolean;
   }
 
   interface IAppOption {

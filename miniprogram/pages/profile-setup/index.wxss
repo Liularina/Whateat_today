@@ -1,0 +1,137 @@
+/* 首次登录资料设置 */
+.page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 64rpx 48rpx;
+  box-sizing: border-box;
+  background: var(--wte-bg);
+}
+
+.setup-card {
+  width: 100%;
+  max-width: 640rpx;
+  padding: 56rpx 40rpx 48rpx;
+  background: #ffffff;
+  border-radius: 32rpx;
+  box-shadow: 0 12rpx 48rpx rgba(180, 140, 105, 0.12);
+}
+
+.setup-card__title {
+  font-size: 44rpx;
+  font-weight: 700;
+  text-align: center;
+  color: var(--wte-text);
+}
+
+.setup-card__desc {
+  margin-top: 16rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ---- 头像 ---- */
+.setup-row {
+  margin-top: 48rpx;
+}
+
+.setup-row--center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.setup-row__tip {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #2e7d32;
+  text-align: center;
+}
+
+.avatar-wrap {
+  position: relative;
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f0ebe3;
+  flex: none;
+}
+
+.avatar-wrap__img {
+  display: block;
+  width: 200rpx;
+  height: 200rpx;
+}
+
+.avatar-wrap__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200rpx;
+  height: 200rpx;
+}
+
+.avatar-wrap__icon {
+  font-size: 56rpx;
+  line-height: 1;
+}
+
+/* 透明按钮覆盖整个圆形区域：点击热区 = 视觉形状 */
+.avatar-wrap__btn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200rpx;
+  height: 200rpx;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  opacity: 0;
+}
+
+.avatar-wrap__btn::after {
+  border: none;
+}
+
+/* ---- 昵称 ---- */
+.setup-row__label {
+  font-size: 28rpx;
+  color: var(--wte-text-weak);
+  margin-bottom: 12rpx;
+}
+
+.nickname-input {
+  width: 100%;
+  height: 88rpx;
+  padding: 0 24rpx;
+  border: 2rpx solid var(--wte-line);
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  line-height: 88rpx;
+  box-sizing: border-box;
+  background: #faf8f5;
+}
+
+.setup-error {
+  margin-top: 24rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 26rpx;
+}
+
+/* ---- 按钮 ---- */
+.setup-actions {
+  margin-top: 48rpx;
+}
+
+.setup-skip {
+  margin-top: 20rpx;
+}

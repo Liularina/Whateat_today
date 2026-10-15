@@ -1,0 +1,125 @@
+/* 我的菜谱 · 做法详情（Phase D） */
+
+.meta-card {
+  margin-top: 28rpx;
+  padding: 28rpx 32rpx;
+  background: var(--wte-card);
+  border-radius: 24rpx;
+  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+}
+
+.meta-card__row {
+  display: flex;
+}
+
+.meta-item {
+  flex: 1;
+}
+
+.meta-item__label {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.meta-item__value {
+  margin-top: 6rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.intro {
+  margin-top: 24rpx;
+}
+
+.intro-text {
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: var(--wte-text);
+}
+
+.ing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.ing-row:last-child {
+  border-bottom: none;
+}
+
+.ing-row__name {
+  font-size: 28rpx;
+  color: var(--wte-text);
+}
+
+.ing-row__amount {
+  font-size: 28rpx;
+  color: var(--wte-text-weak);
+}
+
+.prep-item {
+  padding: 14rpx 0;
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: var(--wte-text);
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.prep-item:last-child {
+  border-bottom: none;
+}
+
+.step {
+  display: flex;
+  padding: 22rpx 0;
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.step:last-child {
+  border-bottom: none;
+}
+
+.step__index {
+  flex: none;
+  width: 44rpx;
+  height: 44rpx;
+  margin-right: 20rpx;
+  border-radius: 50%;
+  background: #fff1e9;
+  color: #d95f2f;
+  font-size: 24rpx;
+  font-weight: 600;
+  text-align: center;
+  line-height: 44rpx;
+}
+
+.step__body {
+  flex: 1;
+}
+
+.step__desc {
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: var(--wte-text);
+}
+
+.step__time {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.tip-item {
+  padding: 14rpx 0;
+  font-size: 26rpx;
+  line-height: 1.5;
+  color: var(--wte-text);
+  border-bottom: 2rpx solid var(--wte-line);
+}
+
+.tip-item:last-child {
+  border-bottom: none;
+}

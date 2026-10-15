@@ -156,6 +156,8 @@ export interface RecipeListParams {
   category?: string;
   /** 按菜名搜索的关键词 */
   keyword?: string;
+  /** 按食材名搜索（命中菜谱 ingredients[].name），与 keyword 独立，可叠加 */
+  ingredient?: string;
   page?: number;
   pageSize?: number;
 }
@@ -201,7 +203,12 @@ export interface GeneratedCookingData {
 export interface GenerateCookingStepsResult {
   source: 'cached' | 'generated';
   recipeId: string;
+  /** 无 familyId 时回退写入旧表 generated_recipes 的 _id */
   generatedId?: string;
+  /** 传 familyId 时写入家庭菜谱库的入口 _id（保存成功即有值） */
+  cookbookId?: string;
+  /** 保存成功的版本号 */
+  version?: number;
   data: GeneratedCookingData;
   createdAt: string;
 }

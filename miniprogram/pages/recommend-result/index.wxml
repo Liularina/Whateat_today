@@ -18,6 +18,24 @@
 
         <view class="menu-card__reason" wx:if="{{item.reason}}">{{item.reason}}</view>
 
+        <!-- 库存覆盖情况 -->
+        <view class="coverage {{item.fullyCovered ? 'coverage--ok' : 'coverage--warn'}}">
+          <view class="coverage__head">
+            <text class="coverage__badge">{{item.fullyCovered ? '库存可做' : '需采购'}}</text>
+            <text class="coverage__text">{{item.coverageText}}</text>
+          </view>
+          <view class="coverage__list" wx:if="{{!item.fullyCovered}}">{{item.missingText}}</view>
+          <view
+            class="wte-btn wte-btn--sm wte-btn--ghost coverage__btn"
+            wx:if="{{!item.fullyCovered && !item.addedToInventory}}"
+            data-index="{{index}}"
+            catchtap="onAddMissingToInventory"
+          >
+            {{addingIndex === index ? '加入中...' : '把缺的食材加入库存'}}
+          </view>
+          <view class="coverage__done" wx:elif="{{item.addedToInventory}}">✓ 缺料已加入食材库</view>
+        </view>
+
         <view class="dish-list">
           <view class="dish-card" wx:for="{{item.dishes}}" wx:for-item="dish" wx:key="recipeId" data-id="{{dish.recipeId}}" bindtap="onOpenRecipe" hover-class="dish-card--hover">
             <view class="dish-card__name">{{dish.name}}</view>

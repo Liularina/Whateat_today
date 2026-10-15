@@ -1,0 +1,44 @@
+<view class="page">
+  <view class="page-header">
+    <view class="page-header__title">我的菜谱</view>
+    <view class="page-header__subtitle" wx:if="{{inited && !error && total > 0}}">共 {{total}} 道做法</view>
+  </view>
+
+  <loading-state wx:if="{{loading && !inited}}" text="正在加载我的菜谱..." />
+
+  <error-state
+    wx:elif="{{error && items.length === 0}}"
+    title="我的菜谱加载失败"
+    description="{{error}}"
+    bind:retry="onRetry"
+  />
+
+  <block wx:else>
+    <view class="error-tip" wx:if="{{error}}">{{error}}</view>
+
+    <view class="dish-list" wx:if="{{items.length > 0}}">
+      <view
+        wx:for="{{items}}"
+        wx:key="_id"
+        class="dish-card"
+        data-id="{{item._id}}"
+        bindtap="onOpenRecipe"
+        hover-class="dish-card--hover"
+      >
+        <view class="dish-card__name">{{item.name}}</view>
+        <view class="dish-card__meta">
+          <view class="chip chip--muted dish-card__cat">{{item.category}}</view>
+          <view class="dish-card__meta-text">{{item.difficultyLabel}} · {{item.cookTime}} · {{item.servings}}</view>
+        </view>
+        <view class="dish-card__version">{{item.versionLabel}} · 更新于 {{item.createdAt}}</view>
+      </view>
+    </view>
+
+    <empty-state
+      wx:elif="{{inited}}"
+      emoji="📖"
+      title="还没有保存过菜谱"
+      description="在菜谱详情页生成详细做法后，会自动保存到这里"
+    />
+  </block>
+</view>

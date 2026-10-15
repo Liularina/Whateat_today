@@ -5,7 +5,7 @@
   align-items: center;
   gap: 16rpx;
   padding: 0 4rpx 24rpx;
-  font-size: 24rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
 }
 
@@ -34,8 +34,8 @@
 }
 
 .nutrition-summary__kcal {
-  font-size: 44rpx;
-  font-weight: 800;
+  font-size: 36rpx;
+  font-weight: 700;
   color: #ff7a45;
 }
 
@@ -56,6 +56,12 @@
   margin-top: 8rpx;
   font-size: 24rpx;
   color: #d4c5b5;
+}
+
+.nutrition-summary__macro {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #6b5a47;
 }
 
 /* 菜品列表 */
@@ -108,6 +114,18 @@
   font-size: 28rpx;
   font-weight: 600;
   color: #ff7a45;
+}
+
+.dish-card__nutrition-text {
+  font-size: 26rpx;
+  color: #5c4a3a;
+  line-height: 1.6;
+}
+
+.dish-card__nutrition-row {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #d4c5b5;
 }
 
 .dish-card__partial-hint {

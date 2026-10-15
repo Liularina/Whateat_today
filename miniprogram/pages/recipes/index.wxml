@@ -19,6 +19,14 @@
     <view class="search__btn" bindtap="onKeywordConfirm" hover-class="search__btn--hover">搜索</view>
   </view>
 
+  <!-- 食材筛选（从食材页「做法」带入） -->
+  <view class="ingredient-filter" wx:if="{{ingredient}}">
+    <view class="ingredient-filter__chip">
+      <text>食材：{{ingredient}}</text>
+      <text class="ingredient-filter__clear" catchtap="onClearIngredient">✕</text>
+    </view>
+  </view>
+
   <!-- 分类筛选 -->
   <scroll-view class="filters" scroll-x enable-flex>
     <view

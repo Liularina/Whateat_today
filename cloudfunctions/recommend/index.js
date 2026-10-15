@@ -232,14 +232,20 @@ async function handleRecommendMenus(event, wxContext) {
   const openid = wxContext.OPENID || '';
 
   // 1. 身份校验
-  const auth = await requireFamilyMember(openid, event.familyId || '');
+  // 家庭偏好只依赖 familyId，与成员校验无依赖关系，并行发起以省一次数据库往返
+  const familyId = event.familyId || '';
+  const authPromise = requireFamilyMember(openid, familyId);
+  const prefsPromise = loadFamilyPreferences(familyId);
+  const auth = await authPromise;
   if (auth.error) {
+    // 成员校验失败时不再等待偏好读取结果，避免无谓挂起
+    void prefsPromise.catch(() => {});
     return auth.error;
   }
   const user = auth.user;
 
   // E2：家庭偏好是过敏原 / 忌口硬过滤的唯一来源，只读服务端数据，不信任客户端
-  const familyPrefs = await loadFamilyPreferences(event.familyId || '');
+  const familyPrefs = await prefsPromise;
   const diet = buildDiet(familyPrefs);
   const tasteHint = Array.isArray(familyPrefs.taste)
     ? familyPrefs.taste.filter((item) => typeof item === 'string' && item.trim()).join('、')
@@ -261,43 +267,32 @@ async function handleRecommendMenus(event, wxContext) {
 
   // 3. 读取家庭食材
   let ingredients;
+  let recipes;
+
+  // 3 + 4. 食材与菜谱库互不依赖，并行读取，省一次数据库往返（对 AI 调用前的等待时间敏感）
   try {
-    const ingResult = await db.collection('ingredients')
-      .where({ familyId: event.familyId })
-      .limit(200)
-      .get();
-    const allIngredients = ingResult.data || [];
+    const [ingResult, recipeResult] = await Promise.all([
+      db.collection('ingredients').where({ familyId }).limit(200).get(),
+      db.collection('recipes').where({ source: 'builtin', isActive: true }).limit(200).get(),
+    ]);
 
     // Phase B：已过期的食材不参与推荐，避免拿坏掉的菜去匹配
-    const today = todayInBeijing();
-    const filtered = filterExpired(allIngredients, today);
+    const allIngredients = ingResult.data || [];
+    const filtered = filterExpired(allIngredients, todayInBeijing());
     ingredients = filtered.kept;
     if (filtered.skipped > 0) {
       console.log('[recommend] 已跳过 ' + filtered.skipped + ' 种过期食材');
     }
+    recipes = recipeResult.data || [];
   } catch (e) {
     if (isCollectionMissing(e)) {
-      return fail('DB_NOT_READY', '数据库集合 ingredients 不存在');
+      // 无法区分是哪个集合缺失时，给出包含两者的提示
+      return fail('DB_NOT_READY', '数据库集合 ingredients 或 recipes 不存在，请先在云开发控制台创建');
     }
     throw e;
   }
 
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
-
-  // 4. 读取启用的内置菜谱
-  let recipes;
-  try {
-    const recipeResult = await db.collection('recipes')
-      .where({ source: 'builtin', isActive: true })
-      .limit(200)
-      .get();
-    recipes = recipeResult.data || [];
-  } catch (e) {
-    if (isCollectionMissing(e)) {
-      return fail('DB_NOT_READY', '数据库集合 recipes 不存在');
-    }
-    throw e;
-  }
 
   if (recipes.length === 0) {
     return fail('NO_RECIPES', '菜谱库还是空的，请先初始化菜谱数据');
@@ -343,7 +338,9 @@ async function handleRecommendMenus(event, wxContext) {
       '每套菜单包含 1~3 道菜，尽量荤素搭配；',
       '优先选择能利用现有食材的菜谱（matchedIngredients 越多的越好）；',
       '结合餐次（' + MEAL_TYPE_LABELS[mealType] + '）选择合适菜品；',
-      '尽量减少需要额外采购的食材；',
+      '现有食材不足以组成完整菜单时，可以推荐需要额外采购食材的菜谱；',
+      '额外采购的食材应是常见易买的，且每套菜单新增食材尽量少；',
+      '三套菜单之间菜品不重复，且尽量覆盖不同的现有食材；',
     ], [
       preferences ? '遵守以下饮食偏好：' + preferences : '',
       tasteHint ? '家庭口味偏好：' + tasteHint : '',
@@ -455,12 +452,32 @@ async function handleRecommendMenus(event, wxContext) {
 
     const items = validIds.map((id) => toRecipeView(recipeMap[id]));
 
+    // 服务端自行计算「还需采购的食材」，不采信 AI 输出：
+    // 汇总该套菜单所有菜品的食材，去掉库存中已有的，剩下的即为需新增的食材。
+    const menuIngredientNames = new Set();
+    for (const item of items) {
+      for (const ing of item.ingredients || []) {
+        const name = (ing.name || '').trim();
+        if (name) menuIngredientNames.add(name);
+      }
+    }
+    const missingIngredients = [];
+    for (const name of menuIngredientNames) {
+      if (!inventoryNames.has(name)) missingIngredients.push(name);
+    }
+    const matchedCount = menuIngredientNames.size - missingIngredients.length;
+
     validMenus.push({
       title: menu.title,
       reason: menu.reason || '',
       recipeIds: validIds,
       items: items,
       totalCookTime: items.reduce((sum, item) => sum + (item.cookTime || 0), 0),
+      // 库存覆盖情况：供前端展示「现有食材可做 / 还需采购 N 种」
+      inventoryMatchedCount: matchedCount,
+      missingCount: missingIngredients.length,
+      missingIngredients: missingIngredients,
+      fullyCovered: missingIngredients.length === 0,
     });
 
     if (validMenus.length >= MENU_COUNT) break;

@@ -17,9 +17,12 @@
     >日历</view>
   </view>
 
-  <!-- 无家庭 -->
+  <!-- 家庭态未就绪：展示加载，不误判为「没有家庭」 -->
+  <loading-state wx:if="{{!familyReady}}" text="正在准备..." />
+
+  <!-- 无家庭（已确认） -->
   <empty-state
-    wx:if="{{!hasFamily}}"
+    wx:elif="{{!hasFamily}}"
     emoji="👨‍👩‍👧"
     title="还没有加入家庭"
     description="菜单是家庭共享的，先创建或加入一个家庭吧"

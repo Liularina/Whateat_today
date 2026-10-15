@@ -88,6 +88,20 @@ export const authService = {
   },
 
   /**
+   * 更新当前用户资料（昵称 / 头像）。
+   * 至少要提供 nickname 或 avatarUrl 之一。成功后同步到本地缓存。
+   */
+  async updateProfile(input: { nickname?: string; avatarUrl?: string }): Promise<AuthUser> {
+    const payload = await callFunction<AuthUserPayload>('auth', 'updateProfile', {
+      nickname: input.nickname || '',
+      avatarUrl: input.avatarUrl || '',
+    });
+    const user = normalizeUser(payload);
+    storage.setCurrentUser(user);
+    return user;
+  },
+
+  /**
    * 启动时的会话恢复。
    *   - 无本地缓存 → 直接 login（首次登录，服务端会创建用户）；
    *   - 有本地缓存 → 先由调用方用缓存恢复 UI，再向服务端校验；

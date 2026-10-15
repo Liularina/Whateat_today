@@ -10,8 +10,8 @@
     </view>
   </view>
 
-  <!-- 登录初始化中 -->
-  <loading-state wx:if="{{!authReady}}" text="正在准备..." />
+  <!-- 登录或家庭态尚未就绪：先展示加载，等态到位再映射到 hasFamily -->
+  <loading-state wx:if="{{!authReady || !familyReady}}" text="正在准备..." />
 
   <block wx:elif="{{!isLoggedIn}}">
     <empty-state

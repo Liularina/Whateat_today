@@ -429,16 +429,19 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('ITEM_LOCKED', '该菜品已锁定，请先取消锁定后再替换');
   }
 
-  // 3. 读取家庭食材 & 菜谱库
-  const ingredients = await loadIngredients(familyId);
+  // 3. 读取家庭食材 / 菜谱库 / 家庭偏好：三者互不依赖，并行读取省两次数据库往返
+  const [ingredients, recipes, familyPrefs] = await Promise.all([
+    loadIngredients(familyId),
+    loadRecipes(),
+    loadFamilyPreferences(familyId),
+  ]);
+
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
-  const recipes = await loadRecipes();
   if (recipes.length === 0) {
     return fail('NO_RECIPES', '菜谱库为空');
   }
 
   // E2：按家庭过敏原 / 忌口硬过滤，AI 只能从安全菜谱里选
-  const familyPrefs = await loadFamilyPreferences(familyId);
   const diet = buildDiet(familyPrefs);
   const dietFiltered = filterRecipes(recipes, diet);
   if (diet.rules.length > 0 && dietFiltered.kept.length === 0) {
@@ -566,16 +569,19 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     return fail('ALL_LOCKED', '所有菜品均已锁定，无需重新推荐');
   }
 
-  // 2. 读取食材 & 菜谱
-  const ingredients = await loadIngredients(familyId);
+  // 2. 读取食材 / 菜谱 / 家庭偏好：三者互不依赖，并行读取省两次数据库往返
+  const [ingredients, recipes, familyPrefs] = await Promise.all([
+    loadIngredients(familyId),
+    loadRecipes(),
+    loadFamilyPreferences(familyId),
+  ]);
+
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
-  const recipes = await loadRecipes();
   if (recipes.length === 0) {
     return fail('NO_RECIPES', '菜谱库为空');
   }
 
   // E2：按家庭过敏原 / 忌口硬过滤，AI 只能从安全菜谱里选
-  const familyPrefs = await loadFamilyPreferences(familyId);
   const diet = buildDiet(familyPrefs);
   const dietFiltered = filterRecipes(recipes, diet);
   if (diet.rules.length > 0 && dietFiltered.kept.length === 0) {

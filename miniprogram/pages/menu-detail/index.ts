@@ -25,9 +25,13 @@ interface DishView {
 interface NutritionSummary {
   totalKcal: number;
   kcalLabel: string;
+  totalProtein: number;
+  totalFat: number;
+  totalCarbs: number;
+  macroRow: string;
   perPersonKcal: number;
   perPersonLabel: string;
-  nutritionStatus: string;  // 'complete' | 'partial' | 'unknown'
+  nutritionStatus: string;
   showWarning: boolean;
   dishCount: number;
   computedCount: number;
@@ -85,6 +89,10 @@ Page({
     nutrition: {
       totalKcal: 0,
       kcalLabel: '',
+      totalProtein: 0,
+      totalFat: 0,
+      totalCarbs: 0,
+      macroRow: '',
       perPersonKcal: 0,
       perPersonLabel: '',
       nutritionStatus: 'unknown' as string,
@@ -118,6 +126,9 @@ Page({
 
       // 营养汇总
       let totalKcal = 0;
+      let totalProtein = 0;
+      let totalFat = 0;
+      let totalCarbs = 0;
       let computedCount = 0;
       let hasPartial = false;
       const items = menu.items || [];
@@ -125,6 +136,9 @@ Page({
       for (const it of items) {
         if (it.nutrition && typeof it.nutrition.calories === 'number') {
           totalKcal += it.nutrition.calories;
+          totalProtein += it.nutrition.protein || 0;
+          totalFat += it.nutrition.fat || 0;
+          totalCarbs += it.nutrition.carbohydrate || 0;
           computedCount++;
         }
         if (it.nutritionStatus === 'partial') hasPartial = true;
@@ -136,6 +150,14 @@ Page({
       const nutrition: NutritionSummary = {
         totalKcal: totalKcal,
         kcalLabel: formatKcal(totalKcal),
+        totalProtein: totalProtein,
+        totalFat: totalFat,
+        totalCarbs: totalCarbs,
+        macroRow: [
+          formatG(totalProtein) + ' 蛋白质',
+          formatG(totalFat) + ' 脂肪',
+          formatG(totalCarbs) + ' 碳水',
+        ].join(' | '),
         perPersonKcal: menu.servings > 0 ? Math.round(totalKcal / menu.servings) : 0,
         perPersonLabel: menu.servings > 0
           ? '人均 ' + formatKcal(Math.round(totalKcal / menu.servings))

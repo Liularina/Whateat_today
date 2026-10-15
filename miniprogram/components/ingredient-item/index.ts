@@ -10,7 +10,7 @@ Component({
       this.triggerEvent('edit', { index: this.data.index, item: this.data.item });
     },
 
-    /** 「已用完」：与删除同义，页面侧走同一套移除流程 */
+    /** 「消耗」：扣减数量，页面侧弹出输入框并计算剩余 */
     onConsume() {
       this.triggerEvent('delete', { index: this.data.index, item: this.data.item, reason: 'consume' });
     },

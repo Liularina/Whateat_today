@@ -25,6 +25,21 @@ interface RecipeView extends RecipeSummary {
 /** 筛选条：第一项固定为「全部」 */
 const CATEGORY_OPTIONS: readonly string[] = [RECIPE_CATEGORY_ALL].concat(RECIPE_CATEGORIES);
 
+/**
+ * 页面参数解码。微信部分基础库不自动 decode query，食材页用 encodeURIComponent
+ * 传入中文，这里做一次 decodeURIComponent 兑底；已是纯文本则原样返回。
+ */
+function decodeParam(value: string): string {
+  if (!value) {
+    return '';
+  }
+  try {
+    return decodeURIComponent(value);
+  } catch (_e) {
+    return value;
+  }
+}
+
 function toView(item: RecipeSummary): RecipeView {
   const parts: string[] = [];
   if (item.cookTime) {
@@ -60,6 +75,8 @@ Page({
     keyword: '',
     /** 已经提交给服务端的搜索词（与输入框内容区分开） */
     activeKeyword: '',
+    /** 从食材页「做法」带入的食材筛选词，与关键词搜索独立 */
+    ingredient: '',
     /** 当前是否处于筛选 / 搜索状态，用于空状态文案 */
     hasFilter: false,
 
@@ -81,9 +98,20 @@ Page({
    * 参数只作为初始筛选条件，用户仍可自由修改。
    */
   onLoad(query?: Record<string, string | undefined>) {
-    const keyword = query && query.keyword ? String(query.keyword).trim() : '';
+    const keyword = decodeParam(query && query.keyword ? String(query.keyword).trim() : '');
+    const ingredient = decodeParam(query && query.ingredient ? String(query.ingredient).trim() : '');
+    const patch: Record<string, unknown> = {};
     if (keyword) {
-      this.setData({ keyword: keyword, activeKeyword: keyword, hasFilter: true });
+      patch.keyword = keyword;
+      patch.activeKeyword = keyword;
+      patch.hasFilter = true;
+    }
+    if (ingredient) {
+      patch.ingredient = ingredient;
+      patch.hasFilter = true;
+    }
+    if (Object.keys(patch).length > 0) {
+      this.setData(patch);
     }
     void this.loadFirstPage();
   },
@@ -105,7 +133,7 @@ Page({
     if (!Number.isInteger(index) || index === this.data.categoryIndex) {
       return;
     }
-    this.setData({ categoryIndex: index, hasFilter: index > 0 || !!this.data.activeKeyword });
+    this.setData({ categoryIndex: index, hasFilter: index > 0 || !!this.data.activeKeyword || !!this.data.ingredient });
     void this.loadFirstPage();
   },
 
@@ -122,13 +150,13 @@ Page({
     this.setData({
       keyword: next,
       activeKeyword: next,
-      hasFilter: this.data.categoryIndex > 0 || !!next,
+      hasFilter: this.data.categoryIndex > 0 || !!next || !!this.data.ingredient,
     });
     void this.loadFirstPage();
   },
 
   onClearKeyword() {
-    this.setData({ keyword: '', activeKeyword: '', hasFilter: this.data.categoryIndex > 0 });
+    this.setData({ keyword: '', activeKeyword: '', hasFilter: this.data.categoryIndex > 0 || !!this.data.ingredient });
     void this.loadFirstPage();
   },
 
@@ -138,8 +166,15 @@ Page({
       categoryIndex: 0,
       keyword: '',
       activeKeyword: '',
+      ingredient: '',
       hasFilter: false,
     });
+    void this.loadFirstPage();
+  },
+
+  /** 清除食材筛选（食材页「做法」带入的筛选词） */
+  onClearIngredient() {
+    this.setData({ ingredient: '', hasFilter: this.data.categoryIndex > 0 || !!this.data.activeKeyword });
     void this.loadFirstPage();
   },
 
@@ -161,6 +196,7 @@ Page({
     return {
       category: this.data.categories[this.data.categoryIndex] || RECIPE_CATEGORY_ALL,
       keyword: this.data.activeKeyword,
+      ingredient: this.data.ingredient,
       page: page,
       pageSize: this.data.pageSize,
     };

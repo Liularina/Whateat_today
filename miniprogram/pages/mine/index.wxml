@@ -1,12 +1,13 @@
 <view class="page">
   <view class="profile">
-    <image class="profile__avatar" src="{{avatarUrl}}" wx:if="{{avatarUrl}}" mode="aspectFill" />
+    <image class="profile__avatar" src="{{avatarDisplayUrl || avatarUrl}}" wx:if="{{avatarDisplayUrl || avatarUrl}}" mode="aspectFill" />
     <view class="profile__avatar profile__avatar--placeholder" wx:else>🙂</view>
     <view>
       <view class="profile__name">{{nickname}}</view>
       <view class="profile__family">用户状态：{{authStatus}}</view>
       <view class="profile__warning" wx:if="{{authError}}">{{authError}}</view>
     </view>
+    <view class="profile__edit" wx:if="{{authStatus === '已登录'}}" bindtap="onGoProfileSetup">编辑</view>
   </view>
 
   <!-- 当前家庭 -->
@@ -36,6 +37,7 @@
     <t-cell-group theme="card">
       <t-cell title="历史菜单" description="回看过去确认过的菜单与做法" arrow bind:click="onGoHistoryMenu" />
       <t-cell title="历史点单" description="查看进行中与已关闭的家庭点单" arrow bind:click="onGoHistoryOrder" />
+      <t-cell title="我的菜谱" description="查看全家已保存的详细做法" arrow bind:click="onGoCookbook" />
     </t-cell-group>
   </view>
 

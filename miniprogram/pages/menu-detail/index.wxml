@@ -21,6 +21,9 @@
         <text class="nutrition-summary__label">热量</text>
         <text class="nutrition-summary__kcal">{{nutrition.kcalLabel}}</text>
       </view>
+      <view class="nutrition-summary__macro" wx:if="{{nutrition.macroRow}}">
+        {{nutrition.macroRow}}
+      </view>
       <view class="nutrition-summary__sub" wx:if="{{nutrition.perPersonLabel}}">
         {{nutrition.perPersonLabel}}
       </view>
@@ -69,12 +72,12 @@
         </view>
 
         <!-- 营养行 -->
-        <view class="dish-card__nutrition" wx:if="{{item.hasNutrition}}">
-          <text class="dish-card__kcal">{{item.kcalLabel}}</text>
+        <view class="dish-card__nutrition" wx:if="{{item.nutritionRow}}">
+          <text class="dish-card__nutrition-text">{{item.nutritionRow}}</text>
           <text wx:if="{{item.isPartial}}" class="dish-card__partial-hint">（部分食材无数据）</text>
         </view>
-        <view class="dish-card__nutrition-row" wx:elif="{{item.nutritionRow}}">
-          {{item.nutritionRow}}
+        <view class="dish-card__nutrition-row" wx:else>
+          暂无营养数据
         </view>
 
         <view class="dish-card__desc" wx:if="{{item.description}}">{{item.description}}</view>

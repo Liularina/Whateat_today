@@ -171,6 +171,56 @@ async function handleGetCurrentUser(event, wxContext) {
   return ok({ user: toAuthUser(user) });
 }
 
+/**
+ * 更新当前用户资料（昵称 / 头像）。
+ * 前端提交 nickname 和 avatarUrl，至少一项非空时才更新。
+ * 头像使用微信 button open-type="chooseAvatar" 获取的临时路径上传到云存储。
+ */
+async function handleUpdateProfile(event, wxContext) {
+  const openid = wxContext.OPENID;
+  if (!openid) {
+    return fail('AUTH_REQUIRED', '无法获取微信用户身份，请重新进入小程序');
+  }
+
+  const nickname = typeof event.nickname === 'string' ? event.nickname.trim() : '';
+  const avatarUrl = typeof event.avatarUrl === 'string' ? event.avatarUrl.trim() : '';
+  if (!nickname && !avatarUrl) {
+    return fail('INVALID_PARAMS', '昵称和头像至少提供一个');
+  }
+
+  const user = await findUserByOpenid(openid);
+  if (!user) {
+    return fail('USER_NOT_FOUND', '用户不存在，请先登录');
+  }
+
+  const updateData = { updatedAt: new Date() };
+  if (nickname) {
+    if (nickname.length < 1 || nickname.length > 20) {
+      return fail('INVALID_PARAMS', '昵称长度为 1-20 个字符');
+    }
+    updateData.nickname = nickname;
+  }
+  if (avatarUrl) {
+    // 接受两种格式：https://（公网）和 cloud://（微信云存储文件 ID）
+    if (!/^(https?|cloud):\/\//.test(avatarUrl)) {
+      return fail('INVALID_PARAMS', '头像地址格式不正确');
+    }
+    updateData.avatarUrl = avatarUrl;
+  }
+
+  try {
+    await usersCol.doc(user._id).update({ data: updateData });
+  } catch (error) {
+    if (isCollectionMissing(error)) {
+      return fail('DB_NOT_READY', DB_NOT_READY_MESSAGE);
+    }
+    console.error('[auth] 更新用户资料失败', error);
+    return fail('USER_UPDATE_FAILED', '更新用户资料失败，请稍后重试');
+  }
+
+  return ok({ user: toAuthUser({ ...user, ...updateData }) });
+}
+
 /* ------------------------------ 业务路由 ------------------------------ */
 
 const handlers = {
@@ -182,6 +232,8 @@ const handlers = {
   login: handleLogin,
 
   getCurrentUser: handleGetCurrentUser,
+
+  updateProfile: handleUpdateProfile,
 };
 
 /* ------------------------------ 入口 ------------------------------ */

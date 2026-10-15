@@ -24,15 +24,28 @@ page {
   --wte-bg: #fbf7f2;
   --wte-card: #ffffff;
   --wte-brand: #ff7a45;
+  --wte-brand-deep: #d95f2f;
   --wte-text: #2f2620;
   --wte-text-weak: #7b6a5c;
+  --wte-text-faint: #a99a8b;
   --wte-line: #f0e7de;
+  --wte-fill: #faf6f0;
+
+  /* ---- 字号层级：全站统一，避免各页面各写一套大小 ---- */
+  --wte-fs-caption: 22rpx;  /* 角标、辅助说明 */
+  --wte-fs-sm: 24rpx;       /* 次要信息 */
+  --wte-fs-base: 28rpx;     /* 正文 */
+  --wte-fs-md: 30rpx;       /* 小标题、强调正文 */
+  --wte-fs-lg: 34rpx;       /* 卡片标题 */
+  --wte-fs-xl: 40rpx;       /* 页面主标题 */
+  --wte-fs-display: 44rpx;  /* 首屏大标题、关键数字 */
 
   background-color: var(--wte-bg);
   color: var(--wte-text);
-  font-size: 28rpx;
+  font-size: var(--wte-fs-base);
   line-height: 1.6;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ---------- 布局 ---------- */
@@ -51,7 +64,7 @@ page {
 }
 
 .section__title {
-  font-size: 32rpx;
+  font-size: var(--wte-fs-md);
   font-weight: 600;
   color: var(--wte-text);
   margin-bottom: 20rpx;
@@ -63,15 +76,17 @@ page {
 }
 
 .page-header__title {
-  font-size: 48rpx;
+  font-size: var(--wte-fs-xl);
   font-weight: 700;
   letter-spacing: 1rpx;
+  line-height: 1.3;
 }
 
 .page-header__subtitle {
-  margin-top: 8rpx;
-  font-size: 26rpx;
+  margin-top: 10rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
+  line-height: 1.5;
 }
 
 /* ---------- 卡片 ---------- */
@@ -79,7 +94,20 @@ page {
   background: var(--wte-card);
   border-radius: 24rpx;
   padding: 32rpx;
-  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+  box-shadow: 0 6rpx 24rpx rgba(180, 140, 105, 0.07);
+}
+
+/* 卡片内统一标题 */
+.card__title {
+  font-size: var(--wte-fs-sm);
+  color: var(--wte-text-weak);
+  letter-spacing: 0.5rpx;
+}
+
+.card__desc {
+  font-size: var(--wte-fs-sm);
+  color: var(--wte-text-weak);
+  line-height: 1.6;
 }
 
 .card + .card {
@@ -98,9 +126,21 @@ page {
   justify-content: center;
   height: 96rpx;
   border-radius: 999rpx;
-  font-size: 32rpx;
+  font-size: var(--wte-fs-md);
   font-weight: 600;
+  letter-spacing: 0.5rpx;
   transition: opacity 0.15s ease;
+}
+
+/* 小号按钮：卡片内的次级操作（各页面共用，避免重复定义） */
+.wte-btn--sm {
+  display: inline-flex;
+  height: auto;
+  min-height: 56rpx;
+  padding: 12rpx 28rpx;
+  border-radius: 40rpx;
+  font-size: var(--wte-fs-sm);
+  font-weight: 500;
 }
 
 .wte-btn--primary {

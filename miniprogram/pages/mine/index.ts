@@ -2,11 +2,27 @@ import { APP_NAME, APP_VERSION, CURRENT_ENV, DEFAULT_NICKNAME } from '../../cons
 import type { FamilyState } from '../../types/family';
 import type { AuthState } from '../../types/user';
 
+/** cloud:// 转成可显示 HTTPS URL */
+function toDisplayUrl(url: string): Promise<string> {
+  if (!url || !url.startsWith('cloud://')) return Promise.resolve(url);
+  return new Promise((resolve) => {
+    wx.cloud.getTempFileURL({
+      fileList: [url],
+      success: (res) => {
+        const tmp = res.fileList && res.fileList[0] && res.fileList[0].tempFileURL;
+        resolve(tmp || '');
+      },
+      fail: () => resolve(''),
+    });
+  });
+}
+
 Page({
   data: {
     nickname: DEFAULT_NICKNAME,
     avatarUrl: '',
-    /** 登录状态文案：正在登录… / 已登录 / 未登录 */
+    /** cloud:// 转成的可显示 HTTPS URL */
+    avatarDisplayUrl: '',
     authStatus: '正在登录…',
     authError: '',
     appName: APP_NAME,
@@ -18,7 +34,7 @@ Page({
     isInFamily: false,
     familyName: '',
     memberCount: 0,
-    familyError: '',
+   familyError: '',
   },
 
   /** 取消登录态订阅的闭包，页面卸载时释放 */
@@ -70,12 +86,30 @@ Page({
       authStatus = state.isLoggedIn ? '已登录' : '未登录';
     }
 
+    const rawAvatar = state.user?.avatarUrl || '';
     this.setData({
       nickname: state.user?.nickname || DEFAULT_NICKNAME,
-      avatarUrl: state.user?.avatarUrl || '',
+      avatarUrl: rawAvatar,
       authStatus,
       authError: state.error,
     });
+
+    // cloud:// 头像转可显示 URL
+    void toDisplayUrl(rawAvatar).then((display) => {
+      this.setData({ avatarDisplayUrl: display || '' });
+    });
+
+    const isDefaultProfile =
+      state.ready && state.isLoggedIn &&
+      state.user &&
+      state.user.nickname === DEFAULT_NICKNAME &&
+      !state.user.avatarUrl;
+
+    // 首次登录且为默认资料 → 自动引导设置
+    if (isDefaultProfile && !getApp<IAppOption>().globalData.profileSetupDone) {
+      getApp<IAppOption>().globalData.profileSetupDone = true;
+      wx.navigateTo({ url: '/pages/profile-setup/index' });
+    }
   },
 
   applyFamilyState(state: FamilyState) {
@@ -114,5 +148,15 @@ Page({
   /** Phase 11：历史点单（点菜 Tab） */
   onGoHistoryOrder() {
     wx.switchTab({ url: '/pages/order/index' });
+  },
+
+  /** Phase D：我的菜谱（家庭菜谱库） */
+  onGoCookbook() {
+    wx.navigateTo({ url: '/pages/cookbook/index' });
+  },
+
+  /** 修改资料：跳转到资料设置页 */
+  onGoProfileSetup() {
+    wx.navigateTo({ url: '/pages/profile-setup/index' });
   },
 });

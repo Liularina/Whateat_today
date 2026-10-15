@@ -72,6 +72,17 @@ Page({
       greeting: state.isLoggedIn ? `你好，${nickname}` : '',
       authError: state.error,
     });
+
+    // 首次登录且为默认资料 → 自动引导设置
+    const isDefaultProfile =
+      state.ready && state.isLoggedIn &&
+      state.user &&
+      state.user.nickname === DEFAULT_NICKNAME &&
+      !state.user.avatarUrl;
+    if (isDefaultProfile && !getApp<IAppOption>().globalData.profileSetupDone) {
+      getApp<IAppOption>().globalData.profileSetupDone = true;
+      wx.navigateTo({ url: '/pages/profile-setup/index' });
+    }
   },
 
   applyFamilyState(state: FamilyState) {

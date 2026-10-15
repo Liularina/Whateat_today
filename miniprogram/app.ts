@@ -124,6 +124,7 @@ App<IAppOption>({
     cloudReady: false,
     lastRecommendResult: null,
     currentMenuId: '',
+    profileSetupDone: false,
   },
 
   onLaunch() {

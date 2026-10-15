@@ -17,7 +17,7 @@
   <view class="ingredient__qty">{{item.quantityText}}</view>
 
   <view class="ingredient__ops">
-    <view class="ingredient__op" catchtap="onConsume">已用完</view>
+    <view class="ingredient__op" catchtap="onConsume">消耗</view>
     <view class="ingredient__op" catchtap="onRestock">补货</view>
     <view class="ingredient__op" catchtap="onRecipes">做法</view>
   </view>

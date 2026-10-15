@@ -220,6 +220,11 @@ function parseListParams(event) {
     return { error: fail('INVALID_PARAMS', '关键词不能超过 ' + RECIPE_KEYWORD_MAX_LENGTH + ' 个字') };
   }
 
+  const ingredient = event.ingredient === undefined || event.ingredient === null ? '' : String(event.ingredient).trim();
+  if (ingredient.length > RECIPE_KEYWORD_MAX_LENGTH) {
+    return { error: fail('INVALID_PARAMS', '食材关键词不能超过 ' + RECIPE_KEYWORD_MAX_LENGTH + ' 个字') };
+  }
+
   const page = event.page === undefined || event.page === null ? 1 : Number(event.page);
   if (!Number.isInteger(page) || page < 1) {
     return { error: fail('INVALID_PARAMS', 'page 必须是不小于 1 的整数') };
@@ -233,7 +238,7 @@ function parseListParams(event) {
     };
   }
 
-  return { value: { category, keyword, page, pageSize } };
+  return { value: { category, keyword, ingredient, page, pageSize } };
 }
 
 /* ------------------------------ 业务处理 ------------------------------ */
@@ -248,7 +253,13 @@ async function listRecipes(event) {
     return parsed.error;
   }
 
-  const { category, keyword, page, pageSize } = parsed.value;
+  const { category, keyword, ingredient, page, pageSize } = parsed.value;
+
+  // 按食材搜索需要匹配 ingredients 数组内字段，云数据库对数组内对象的点号正则支持不稳，
+  // 内置菜谱量很小（几十道），一次读回后内存过滤即可，结果与分页逻辑保持一致。
+  if (ingredient) {
+    return listRecipesByIngredient({ category, keyword, ingredient, page, pageSize });
+  }
 
   const condition = { source: 'builtin', isActive: true };
   if (category) {
@@ -274,6 +285,43 @@ async function listRecipes(event) {
         items.push(toRecipeSummary(doc));
       }
     }
+
+    return ok({ items: items, total: total, page: page, pageSize: pageSize });
+  } catch (error) {
+    if (isCollectionMissing(error)) {
+      return fail('DB_NOT_READY', DB_NOT_READY_MESSAGE);
+    }
+    throw error;
+  }
+}
+
+/**
+ * 按食材名搜索菜谱：命中 ingredients[].name（例如食材页「鸡蛋」→ 番茄炒蛋 / 蛋炒饭）。
+ * 与 listRecipes 的 keyword（按菜名）互相独立，两者同时存在时取交集。
+ */
+async function listRecipesByIngredient({ category, keyword, ingredient, page, pageSize }) {
+  try {
+    const condition = { source: 'builtin', isActive: true };
+    if (category) {
+      condition.category = category;
+    }
+    const res = await recipesCol.where(condition).limit(1000).get();
+
+    const lowerKeyword = keyword.toLowerCase();
+    let docs = (res.data || []).filter((doc) => {
+      const ingredients = Array.isArray(doc.ingredients) ? doc.ingredients : [];
+      if (!ingredients.some((item) => item && item.name && String(item.name).indexOf(ingredient) !== -1)) {
+        return false;
+      }
+      if (lowerKeyword && String(doc.name || '').toLowerCase().indexOf(lowerKeyword) === -1) {
+        return false;
+      }
+      return true;
+    });
+
+    docs = docs.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN'));
+    const total = docs.length;
+    const items = docs.slice((page - 1) * pageSize, page * pageSize).map(toRecipeSummary);
 
     return ok({ items: items, total: total, page: page, pageSize: pageSize });
   } catch (error) {
@@ -547,42 +595,45 @@ async function handleGenerateCookingSteps(event, wxContext) {
 
   const servings = Number.isInteger(event.servings) && event.servings > 0 ? event.servings : (doc.servings || 2);
 
-  // 读当前用户
+  // 身份校验：传了 familyId 时 requireFamilyMember 内部已读取 users，
+  // 不再单独查一次 users，避免同一请求里重复读取同一个文档。
   let user;
-  try {
-    const userResult = await db.collection('users').where({ openid }).limit(1).get();
-    user = userResult.data[0];
-  } catch (e) {
-    if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 users 不存在');
-    throw e;
-  }
-  if (!user) return fail('UNAUTHORIZED', '请先登录');
-
-  // 如提供了 familyId，校验成员身份
   if (familyId) {
     const auth = await requireFamilyMember(openid, familyId);
     if (auth.error) return auth.error;
     user = auth.user;
+  } else {
+    try {
+      const userResult = await db.collection('users').where({ openid }).limit(1).get();
+      user = userResult.data[0];
+    } catch (e) {
+      if (isCollectionMissing(e)) return fail('DB_NOT_READY', '数据库集合 users 不存在');
+      throw e;
+    }
+    if (!user) return fail('UNAUTHORIZED', '请先登录');
   }
 
-  // 1. 先查旧缓存（generated_recipes，兼容已有数据）
-  let oldCached;
-  try {
-    oldCached = await db.collection('generated_recipes')
-      .where({ recipeId, userId: openid })
-      .orderBy('createdAt', 'desc')
-      .limit(1)
-      .get();
-  } catch (e) {
-    if (!isCollectionMissing(e)) throw e;
-  }
-  if (oldCached && oldCached.data && oldCached.data.length > 0) {
-    return ok({
-      source: 'cached',
-      recipeId: recipeId,
-      data: oldCached.data[0].data,
-      createdAt: oldCached.data[0].createdAt,
-    });
+  // 1. 未传 familyId 时，先查旧缓存（generated_recipes，兼容已有数据）。
+  //    传了 familyId 则跳过旧表，直接走家庭菜谱库，避免命中旧缓存后不保存。
+  if (!familyId) {
+    let oldCached;
+    try {
+      oldCached = await db.collection('generated_recipes')
+        .where({ recipeId, userId: openid })
+        .orderBy('createdAt', 'desc')
+        .limit(1)
+        .get();
+    } catch (e) {
+      if (!isCollectionMissing(e)) throw e;
+    }
+    if (oldCached && oldCached.data && oldCached.data.length > 0) {
+      return ok({
+        source: 'cached',
+        recipeId: recipeId,
+        data: oldCached.data[0].data,
+        createdAt: oldCached.data[0].createdAt,
+      });
+    }
   }
 
   // 2. 查家庭菜谱库缓存

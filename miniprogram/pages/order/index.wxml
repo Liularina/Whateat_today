@@ -22,8 +22,10 @@
     >已关闭</view>
   </view>
 
+  <loading-state wx:if="{{!familyReady}}" text="正在准备..." />
+
   <empty-state
-    wx:if="{{!hasFamily}}"
+    wx:elif="{{!hasFamily}}"
     emoji="👨‍👩‍👧"
     title="还没有加入家庭"
     description="点单需要先创建一个家庭或加入已有家庭"
