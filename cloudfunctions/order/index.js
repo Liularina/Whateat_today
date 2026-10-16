@@ -7,6 +7,7 @@
  *   submitOrderItems —— 成员提交/修改自己的点单
  *   getOrderSummary  —— 管理员查看汇总
  *   closeOrder       —— 管理员关闭点单
+ *   deleteOrders     —— 删除已关闭的点单（未关闭的不允许删除）
  *
  * 安全：
  *   1. 身份只来自 cloud.getWXContext().OPENID
@@ -673,6 +674,76 @@ async function handleCloseOrder(event, wxContext) {
   });
 }
 
+/* ============================== deleteOrders ============================== */
+
+/** 单次最多删除的点单数：避免一次请求做过多数据库写操作 */
+const MAX_DELETE_BATCH = 20;
+
+/**
+ * 批量删除已关闭的点单。
+ *
+ * 约束：
+ *   1. 只能删除本人所属家庭、且状态为 closed 的点单；进行中的点单必须先关闭；
+ *   2. 只有家庭管理员或点单发起人可以删除；
+ *   3. 先整体校验再统一删除 —— 任何一条不合法就整批拒绝，避免删一半留一半；
+ *   4. 关联的 family_order_items 一并清理，不留孤儿数据。
+ */
+async function handleDeleteOrders(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const { familyId, orderIds } = event;
+
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return fail('INVALID_PARAMS', '请选择要删除的点单');
+  }
+  if (orderIds.length > MAX_DELETE_BATCH) {
+    return fail('INVALID_PARAMS', '一次最多删除 ' + MAX_DELETE_BATCH + ' 条点单');
+  }
+
+  const ids = [];
+  for (const raw of orderIds) {
+    const id = typeof raw === 'string' ? raw.trim() : '';
+    if (!id) return fail('INVALID_PARAMS', '点单 ID 无效');
+    if (ids.indexOf(id) === -1) ids.push(id);
+  }
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+  const isOwner = auth.member.role === 'owner';
+
+  // 第一遍：整体校验
+  const orders = [];
+  for (const id of ids) {
+    const order = await readOrder(id);
+    if (!order) return fail('ORDER_NOT_FOUND', '点单不存在或已被删除');
+    if (order.familyId !== familyId) {
+      return fail('FORBIDDEN', '只能删除本家庭的点单');
+    }
+    if (order.status !== 'closed') {
+      return fail('ORDER_NOT_CLOSED', '只能删除已关闭的点单，请先关闭该点单');
+    }
+    if (!isOwner && order.initiatorUserId !== auth.user._id) {
+      return fail('FORBIDDEN', '只有家庭管理员或点单发起人可以删除点单');
+    }
+    orders.push(order);
+  }
+
+  // 第二遍：统一删除
+  const deleted = [];
+  for (const order of orders) {
+    try {
+      await db.collection('family_order_items').where({ orderId: order._id }).remove();
+    } catch (e) {
+      // family_order_items 可能从未创建（无人提交过），此时无关联数据可删
+      if (!isCollectionMissing(e)) throw e;
+    }
+    await db.collection('family_orders').doc(order._id).remove();
+    deleted.push(order._id);
+  }
+
+  return ok({ deleted: deleted, deletedCount: deleted.length });
+}
+
 /* ============================== 业务路由 ============================== */
 
 const handlers = {
@@ -686,6 +757,7 @@ const handlers = {
   submitOrderItems: handleSubmitOrderItems,
   getOrderSummary: handleGetOrderSummary,
   closeOrder: handleCloseOrder,
+  deleteOrders: handleDeleteOrders,
 
   /** 旧版桩 */
   submitOrderItem() {

@@ -4,9 +4,9 @@
     <view class="page-header__subtitle">按人数和口味，让 AI 从菜谱库中为你推荐</view>
   </view>
 
-  <!-- API 未配置提示 -->
-  <view class="config-banner" wx:if="{{!aiConfigured}}">
-    <view class="config-banner__text">尚未配置模型 API，需先设置才能使用推荐功能</view>
+  <!-- AI 不可用提示（仅当内置未就绪且无自定义配置时显示） -->
+  <view class="config-banner" wx:if="{{!aiReady}}">
+    <view class="config-banner__text">AI 服务暂不可用，请检查「模型 API 设置」</view>
     <view class="wte-btn wte-btn--ghost config-banner__btn" bindtap="onGoSettings">去设置</view>
   </view>
 
@@ -72,8 +72,8 @@
     </view>
   </view>
 
-  <!-- API 设置快捷入口 -->
-  <view class="settings-link" bindtap="onGoSettings" wx:if="{{aiConfigured}}">
+  <!-- AI 设置快捷入口 -->
+  <view class="settings-link" bindtap="onGoSettings" wx:if="{{aiReady}}">
     <text>模型 API 设置 ›</text>
   </view>
 

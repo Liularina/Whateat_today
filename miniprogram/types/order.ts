@@ -157,3 +157,11 @@ export interface OrderListResult {
   page: number;
   pageSize: number;
 }
+
+/* ============================== 删除 ============================== */
+
+/** deleteOrders 返回 */
+export interface DeleteOrdersResult {
+  deleted: string[];
+  deletedCount: number;
+}

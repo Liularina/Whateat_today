@@ -668,8 +668,11 @@ Page({
       const name = item.standardName || item.name;
       wx.showModal({
         title: '库存将用完',
-        content: '消耗数量已用完「' + name + '」的库存，是否从库存移除？',
+        content:
+          '消耗数量已用完「' + name + '」的库存，是否从库存移除？' +
+          '移除后不保留任何历史记录。',
         confirmText: '移除',
+        confirmColor: '#e8850c',
         success: (res) => {
           if (res.confirm) {
             void this.deleteIngredient(item._id, '已用完，已移除');
@@ -770,23 +773,37 @@ Page({
     wx.navigateTo({ url: '/pages/recipes/index?ingredient=' + encodeURIComponent(keyword) });
   },
 
-  /** 删除必须二次确认（编辑表单里的删除入口） */
+  /**
+   * 删除确认：删除是破坏性操作，且服务端不留归档。
+   * 因此提示语必须让用户确认「这袋食材已经用完」这个前提，
+   * 避免把还有库存的食材误删成历史空白。
+   */
+  confirmIngredientDelete(name: string, stockText: string, onConfirm: () => void) {
+    wx.showModal({
+      title: '删除食材',
+      content:
+        '请确认「' + name + '」的耗材已经清零（当前库存 ' + stockText + '）。' +
+        '删除后不保留任何历史记录，也无法恢复。',
+      confirmText: '确认删除',
+      confirmColor: '#e8850c',
+      success: (res) => {
+        if (res.confirm) {
+          onConfirm();
+        }
+      },
+    });
+  },
+
+  /** 列表项上的「删除」入口 */
   onDeleteIngredient(e: WechatMiniprogram.CustomEvent) {
     const item = (e.detail && e.detail.item) as Ingredient | undefined;
     if (!item) {
       return;
     }
-
-    wx.showModal({
-      title: '删除食材',
-      content: '确定要删除「' + (item.standardName || item.name) + '」吗？删除后无法恢复。',
-      confirmText: '删除',
-      confirmColor: '#e34d59',
-      success: (res) => {
-        if (res.confirm) {
-          void this.deleteIngredient(item._id, '已删除');
-        }
-      },
+    const name = item.standardName || item.name;
+    const stockText = item.quantity + ' ' + item.unit;
+    this.confirmIngredientDelete(name, stockText, () => {
+      void this.deleteIngredient(item._id, '已删除');
     });
   },
 
@@ -797,17 +814,12 @@ Page({
       return;
     }
     const name = (this.data.formName || '该食材').trim();
-    wx.showModal({
-      title: '删除食材',
-      content: '确定要删除「' + name + '」吗？删除后无法恢复。',
-      confirmText: '删除',
-      confirmColor: '#e34d59',
-      success: (res) => {
-        if (res.confirm) {
-          this.setData({ formVisible: false });
-          void this.deleteIngredient(id, '已删除');
-        }
-      },
+    const unit = UNIT_VALUES[this.data.formUnitIndex];
+    const quantity = parseQuantity(this.data.formQuantity);
+    const stockText = (quantity === null ? '-' : quantity) + ' ' + unit;
+    this.confirmIngredientDelete(name, stockText, () => {
+      this.setData({ formVisible: false });
+      void this.deleteIngredient(id, '已删除');
     });
   },
 

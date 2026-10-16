@@ -76,13 +76,13 @@
   <view class="section">
     <view class="section__title">AI 详细做法</view>
 
-    <!-- 未配置 API -->
-    <view class="card" wx:if="{{!aiConfigured && !generatedData && !generating}}">
-      <empty-state emoji="🤖" title="配置模型 API 生成详细做法" description="使用你自己的 API 为每道菜生成详细的烹饪步骤" actionText="去配置" bind:action="onGoSettings" />
+    <!-- AI 不可用 -->
+    <view class="card" wx:if="{{!aiReady && !generatedData && !generating}}">
+      <empty-state emoji="🤖" title="AI 服务暂不可用" description="请检查「模型 API 设置」中的 AI 服务状态" actionText="去设置" bind:action="onGoSettings" />
     </view>
 
     <!-- 生成按钮 -->
-    <view class="card" wx:if="{{aiConfigured && !generatedData && !generating}}">
+    <view class="card" wx:if="{{aiReady && !generatedData && !generating}}">
       <view class="wte-btn wte-btn--primary-outline wte-btn--block" bindtap="onGenerateSteps">
         生成详细做法
       </view>
@@ -161,7 +161,7 @@
       </view>
 
       <!-- 重新生成 -->
-      <view class="actions" wx:if="{{aiConfigured}}">
+      <view class="actions" wx:if="{{aiReady}}">
         <view class="wte-btn wte-btn--ghost wte-btn--block" bindtap="onRegenerateSteps">重新生成</view>
       </view>
     </block>

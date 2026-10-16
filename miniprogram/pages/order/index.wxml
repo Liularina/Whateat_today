@@ -4,6 +4,13 @@
     <view class="page-header__subtitle">看看家里正在点单和已经结束的点单</view>
   </view>
 
+  <view class="manage-bar-top" wx:if="{{hasFamily && (selectableCount > 0 || manageMode)}}">
+    <text class="manage-bar-top__hint">
+      {{manageMode ? '勾选已关闭的点单，然后删除' : '已关闭的点单可以勾选删除'}}
+    </text>
+    <view class="manage-bar-top__btn" bindtap="onToggleManage">{{manageMode ? '完成' : '管理'}}</view>
+  </view>
+
   <view class="filter-bar" wx:if="{{hasFamily}}">
     <view
       class="filter-item {{statusFilter === 'all' ? 'filter-item--active' : ''}}"
@@ -49,7 +56,7 @@
 
   <view class="order-list" wx:else>
     <view
-      class="order-card"
+      class="order-card {{manageMode ? 'order-card--manage' : ''}} {{selectedMap[item.orderId] ? 'order-card--selected' : ''}} {{manageMode && item.status !== 'closed' ? 'order-card--locked' : ''}}"
       wx:for="{{orders}}"
       wx:key="orderId"
       data-id="{{item.orderId}}"
@@ -57,6 +64,12 @@
       hover-class="order-card--hover"
     >
       <view class="order-card__header">
+        <view
+          class="checkbox {{selectedMap[item.orderId] ? 'checkbox--on' : ''}} {{item.status !== 'closed' ? 'checkbox--disabled' : ''}}"
+          wx:if="{{manageMode}}"
+        >
+          <text wx:if="{{selectedMap[item.orderId]}}">✓</text>
+        </view>
         <view class="order-card__title">{{item.title}}</view>
         <view class="order-card__status {{item.status === 'open' ? 'order-card__status--open' : ''}}">
           {{item.status === 'open' ? '进行中' : '已关闭'}}
@@ -71,6 +84,7 @@
         <text wx:elif="{{item.closedAt}}">关闭于 {{item.closedAt}}</text>
         <text wx:else>不限时</text>
         <text wx:if="{{item.memberCount > 0}}">{{item.memberCount}} 人参与</text>
+        <text class="order-card__locked" wx:if="{{manageMode && item.status !== 'closed'}}">进行中，不可删除</text>
       </view>
     </view>
 
@@ -78,7 +92,15 @@
   </view>
 
   <view class="footer-bar">
-    <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onCreateOrder">
+    <block wx:if="{{manageMode}}">
+      <view class="manage-bar">
+        <view class="manage-bar__all" bindtap="onSelectAllClosed">全选已关闭</view>
+        <view class="wte-btn wte-btn--danger manage-bar__del" bindtap="onDeleteSelected">
+          {{selectedCount > 0 ? '删除（' + selectedCount + '）' : '删除'}}
+        </view>
+      </view>
+    </block>
+    <view class="wte-btn wte-btn--primary wte-btn--block" wx:else bindtap="onCreateOrder">
       发起家庭点单
     </view>
   </view>

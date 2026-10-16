@@ -20,5 +20,6 @@
     <view class="ingredient__op" catchtap="onConsume">消耗</view>
     <view class="ingredient__op" catchtap="onRestock">补货</view>
     <view class="ingredient__op" catchtap="onRecipes">做法</view>
+    <view class="ingredient__op ingredient__op--danger" catchtap="onRemove">删除</view>
   </view>
 </view>

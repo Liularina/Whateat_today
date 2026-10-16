@@ -10,6 +10,7 @@ import type {
   CloseOrderResult,
   OrderListParams,
   OrderListResult,
+  DeleteOrdersResult,
 } from '../types/order';
 import { callFunction } from '../utils/cloud';
 
@@ -45,5 +46,17 @@ export const orderService = {
   /** 关闭点单 */
   close(orderId: string): Promise<CloseOrderResult> {
     return callFunction<CloseOrderResult, { orderId: string }>('order', 'closeOrder', { orderId });
+  },
+
+  /**
+   * 批量删除已关闭的点单。
+   * 服务端会拒绝未关闭的点单，并只允许管理员或发起人操作。
+   */
+  deleteOrders(familyId: string, orderIds: string[]): Promise<DeleteOrdersResult> {
+    return callFunction<DeleteOrdersResult, { familyId: string; orderIds: string[] }>(
+      'order',
+      'deleteOrders',
+      { familyId, orderIds },
+    );
   },
 };

@@ -76,9 +76,10 @@
             index="{{index}}"
             categoryLabel="{{item.categoryLabel}}"
             bind:edit="onEditIngredient"
-            bind:delete="onConsumeIngredient"
+            bind:consume="onConsumeIngredient"
             bind:restock="onRestockIngredient"
             bind:recipes="onViewRecipes"
+            bind:remove="onDeleteIngredient"
           />
         </view>
       </view>

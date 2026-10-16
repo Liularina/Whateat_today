@@ -11,7 +11,7 @@
  *   1. 身份只来自 cloud.getWXContext().OPENID；
  *   2. 必须经 requireFamilyMember 复核家庭归属；
  *   3. 食材和菜谱以服务端 DB 数据为准，不信任客户端提交的内容；
- *   4. AI 调用使用用户自配的 API 密钥，从 user_ai_configs 解密后使用；
+ *   4. AI 调用由 ai-service 统一管理（内置或自定义），不在此处直连 API；
  *   5. 营养值由 Phase 5 营养计算得出，不信任 AI 输出；
  *   6. 日志不记录 API Key、Authorization 头或完整请求体。
  */

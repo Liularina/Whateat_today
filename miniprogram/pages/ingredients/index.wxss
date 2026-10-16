@@ -253,6 +253,7 @@
 }
 
 .sheet__btn--danger {
-  background: #fdecee;
-  color: #c0392b;
+  background: var(--wte-warn-bg);
+  border: 2rpx solid var(--wte-warn-line);
+  color: var(--wte-warn);
 }

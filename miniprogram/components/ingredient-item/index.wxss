@@ -91,3 +91,12 @@
   font-size: 24rpx;
   color: #9a8c7d;
 }
+
+/* 删除是破坏性操作：用橙色与其余操作区分，且推到最右侧 */
+.ingredient__op--danger {
+  margin-left: auto;
+  background: var(--wte-warn-bg);
+  border: 2rpx solid var(--wte-warn-line);
+  color: var(--wte-warn);
+  font-weight: 600;
+}

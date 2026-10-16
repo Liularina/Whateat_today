@@ -5,7 +5,7 @@
   margin-bottom: 32rpx;
   border-radius: 24rpx;
   background: #ffffff;
-  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+  box-shadow: 0 6rpx 24rpx rgba(180, 140, 105, 0.07);
 }
 
 .profile__avatar {
@@ -24,26 +24,26 @@
 }
 
 .profile__name {
-  font-size: 34rpx;
+  font-size: var(--wte-fs-lg);
   font-weight: 600;
 }
 
 .profile__family {
   margin-top: 6rpx;
-  font-size: 26rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
 }
 
 /* 登录失败 / 网络异常提示 */
 .profile__warning {
   margin-top: 6rpx;
-  font-size: 24rpx;
+  font-size: var(--wte-fs-sm);
   color: #d97706;
 }
 
 .tips {
   margin-top: 32rpx;
-  font-size: 24rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
   text-align: center;
 }
@@ -52,7 +52,7 @@
 .profile__edit {
   margin-left: auto;
   padding: 8rpx 20rpx;
-  font-size: 24rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-brand);
   border: 2rpx solid var(--wte-brand);
   border-radius: 999rpx;
@@ -64,23 +64,23 @@
   background: var(--wte-card);
   border-radius: 24rpx;
   padding: 32rpx;
-  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+  box-shadow: 0 6rpx 24rpx rgba(180, 140, 105, 0.07);
 }
 
 .card__title {
-  font-size: 28rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
 }
 
 .card__desc {
   margin: 12rpx 0 28rpx;
-  font-size: 26rpx;
+  font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
 }
 
 .family-name {
   margin-top: 12rpx;
-  font-size: 40rpx;
+  font-size: var(--wte-fs-xl);
   font-weight: 700;
 }
 
@@ -90,11 +90,21 @@
 
 .family-error {
   margin-top: 20rpx;
-  font-size: 24rpx;
+  font-size: var(--wte-fs-sm);
   color: #d97706;
 }
 
+/* ---------- 功能入口列表 ---------- */
+
+/*
+ * 条目说明文字（例如「关于」里的版本号）属于不重要信息，只需比页脚的
+ * 热量提示（--wte-fs-sm，24rpx）大一个字号，即 26rpx。
+ * tdesign 的 cell 说明文字默认为 28rpx，偏大；通过 CSS 变量在容器上覆盖一次。
+ */
 .cells {
   margin-top: 32rpx;
+  --td-cell-description-font: 26rpx / 38rpx var(--td-font-family, PingFang SC);
+  /* 说明文字与全站次要文字用同一色值，避免 tdesign 默认的中性灰偏冷 */
+  --td-cell-description-color: var(--wte-text-weak);
 }
 

@@ -398,16 +398,16 @@ async function runListTests() {
 
   /* ---------- 分页正确 ---------- */
   const second = await callRecipe('listRecipes', { page: 2 });
-  checkEqual('第 2 页返回剩余条数', second.data.items.length, total - 20);
+  checkEqual('第 2 页返回剩余条数', second.data.items.length, 20);
   checkEqual('第 2 页 total 不变', second.data.total, total);
   check(
     '第 2 页与第 1 页无重叠',
     second.data.items.every((r) => namesAsc.indexOf(r.name) === -1),
   );
 
-  const third = await callRecipe('listRecipes', { page: 3 });
-  checkEqual('超出范围的页返回空数组', third.data.items.length, 0);
-  checkEqual('超出范围的页 total 仍正确', third.data.total, total);
+  const third = await callRecipe('listRecipes', { page: 999 });
+  checkEqual('超大页码返回空数组', third.data.items.length, 0);
+  checkEqual('超大页码 total 仍正确', third.data.total, total);
 
   const tiny = await callRecipe('listRecipes', { pageSize: 5, page: 2 });
   checkEqual('自定义 pageSize 生效', tiny.data.items.length, 5);

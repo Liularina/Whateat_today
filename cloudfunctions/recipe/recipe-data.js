@@ -241,7 +241,7 @@ const BUILTIN_RECIPES = [
       { step: 4, description: '锅中留底油爆香蒜末，下青椒块翻炒 1 分钟。', minutes: 2 },
       { step: 5, description: '倒回土豆和茄子，淋入料汁大火翻炒收汁，加食盐调味出锅。', minutes: 3 },
     ],
-  }
+  },
   {
     name: '番茄炒蛋',
     description: '最经典的下饭家常菜，酸甜的番茄裹着嫩滑蛋块，十几分钟就能上桌。',

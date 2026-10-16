@@ -27,8 +27,8 @@ Page({
     cookTimeOptions: COOK_TIME_OPTIONS,
     tasteOptions: TASTE_OPTIONS.map((label) => ({ label, active: false })) as TasteOption[],
 
-    /** AI 配置状态 */
-    aiConfigured: true,
+    /** AI 可用状态：内置就绪 或 自定义已配置 */
+    aiReady: true,
     aiConfigError: '',
 
     /** 推荐中 */
@@ -48,8 +48,11 @@ Page({
     try {
       const { aiConfigService } = await require('../../services/ai-config');
       const config = await aiConfigService.getConfig();
+      // 内置就绪 或 自定义已配置 都视为 AI 可用
+      const aiReady = (config.mode === 'builtin' && config.builtin.ready)
+                    || (config.mode === 'custom' && config.configured);
       this.setData({
-        aiConfigured: config.configured,
+        aiReady: aiReady,
         aiConfigError: '',
       });
     } catch (_e) {
@@ -87,8 +90,8 @@ Page({
 
   /** 开始推荐：收集条件 → 调云函数 → 跳转结果页 */
   async onStartRecommend() {
-    if (!this.data.aiConfigured) {
-      wx.showToast({ title: '请先配置模型 API', icon: 'none' });
+    if (!this.data.aiReady) {
+      wx.showToast({ title: 'AI 服务暂不可用，请检查设置', icon: 'none' });
       return;
     }
 

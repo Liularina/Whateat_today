@@ -48,7 +48,7 @@ Page({
     steps: [] as StepView[],
 
     /* Phase 10：AI 生成 */
-    aiConfigured: false,
+    aiReady: false,
     generating: false,
     generatedData: null as GeneratedCookingData | null,
     generatedIntro: '',
@@ -93,7 +93,9 @@ Page({
   async checkAiConfig() {
     try {
       const config = await aiConfigService.getConfig();
-      this.setData({ aiConfigured: config.configured });
+      const aiReady = (config.mode === 'builtin' && config.builtin.ready)
+                    || (config.mode === 'custom' && config.configured);
+      this.setData({ aiReady: aiReady });
     } catch (_e) {
       // 静默
     }
@@ -133,10 +135,10 @@ Page({
   /* ============================== Phase 10：AI 生成 ============================== */
 
   async onGenerateSteps() {
-    if (!this.data.aiConfigured) {
+    if (!this.data.aiReady) {
       wx.showModal({
-        title: '未配置模型 API',
-        content: '请先在「模型 API 设置」中配置你的 API',
+        title: 'AI 服务暂不可用',
+        content: '请在「模型 API 设置」中检查 AI 服务状态',
         confirmText: '去设置',
         success: (res) => {
           if (res.confirm) wx.navigateTo({ url: '/pages/ai-settings/index' });

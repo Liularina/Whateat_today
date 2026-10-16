@@ -11,7 +11,7 @@
  *   custom  —— 用户自配 OpenAI 兼容 API，Key 以 AES-256-GCM 密文存 user_ai_configs。
  *
  * 内置通道环境变量：
- *   AI_BUILTIN_ENABLED      'true' 才启用；缺省即关闭（fail closed，避免误开产生费用）
+ *   AI_BUILTIN_ENABLED      'false' 才禁用；不设视为启用（fail open，方便运维）
  *   AI_BUILTIN_BASE_URL     供应商 Base URL，必须 https 且非内网地址
  *   AI_BUILTIN_MODEL        模型名
  *   AI_BUILTIN_API_KEY      供应商 Key（明文，绝不写入日志或响应）
@@ -75,9 +75,9 @@ const CN_OFFSET_MS = 8 * 60 * 60 * 1000;
 /* ============================== 错误码 ============================== */
 
 const ERROR_MESSAGES = {
-  AI_BUILTIN_NOT_READY: '内置 AI 暂不可用，请到「模型 API 设置」配置自己的 API 后重试',
-  AI_QUOTA_EXCEEDED: '今日内置 AI 次数已用完，可明天再试，或到「模型 API 设置」配置自己的 API',
-  AI_CONFIG_REQUIRED: '尚未配置模型 API，请先在「模型 API 设置」中配置',
+  AI_BUILTIN_NOT_READY: '内置 AI 暂不可用，请稍后重试',
+  AI_QUOTA_EXCEEDED: '今日内置 AI 次数已用完，可明天再试，或到「模型 API 设置」启用自定义 API',
+  AI_CONFIG_REQUIRED: '尚未配置自定义 API，请先在「模型 API 设置」中配置',
   AI_MODE_INVALID: '无效的 AI 模式',
   AI_DB_NOT_READY: '数据库集合不存在，请先在云开发控制台创建',
 };
@@ -146,7 +146,11 @@ function readDailyQuota() {
  */
 function getBuiltinConfig() {
   const dailyQuota = readDailyQuota();
-  const enabled = String(process.env[ENV_BUILTIN_ENABLED] || '').trim().toLowerCase() === 'true';
+
+  // AI_BUILTIN_ENABLED 只在显式设为 'false' 时才禁用；
+  // 缺失或空值视为「已启用」—— 毕竟运维已经把 API_KEY / BASE_URL / MODEL 配上了。
+  const rawEnabled = (process.env[ENV_BUILTIN_ENABLED] || '').trim().toLowerCase();
+  const enabled = rawEnabled !== 'false';
 
   const empty = {
     enabled: enabled,

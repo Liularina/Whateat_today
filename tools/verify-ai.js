@@ -206,8 +206,8 @@ function runBuiltinChecks() {
 
   clearBuiltinEnv();
   let status = aiService.getBuiltinStatus();
-  checkEqual('未配置任何环境变量时不启用', status.enabled, false);
-  checkEqual('未配置任何环境变量时不可用', status.ready, false);
+  checkEqual('未配置任何环境变量时默认启用（fail open，方便运维）', status.enabled, true);
+  checkEqual('未配置任何环境变量时不可用（缺凭据）', status.ready, false);
   checkEqual('默认每日额度为 20', status.dailyQuota, aiService.DEFAULT_BUILTIN_DAILY_QUOTA);
 
   process.env.AI_BUILTIN_ENABLED = 'false';
@@ -555,8 +555,8 @@ function runErrorCodeChecks() {
   });
 
   check(
-    '内置未就绪文案引导用户配置自己的 API',
-    aiService.friendlyAiMessage('AI_BUILTIN_NOT_READY').indexOf('模型 API 设置') !== -1,
+    '内置未就绪文案不引导用户自配 API',
+    aiService.friendlyAiMessage('AI_BUILTIN_NOT_READY').indexOf('模型 API 设置') === -1,
   );
   check(
     '额度用尽文案说明可次日再试',

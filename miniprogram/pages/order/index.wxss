@@ -90,3 +90,97 @@
   font-size: 24rpx;
   color: var(--wte-text-weak);
 }
+
+/* ---------- 选择删除 ---------- */
+
+/* 顶部：管理入口 + 说明 */
+.manage-bar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4rpx 20rpx;
+}
+
+.manage-bar-top__hint {
+  font-size: var(--wte-fs-sm);
+  color: var(--wte-text-weak);
+}
+
+.manage-bar-top__btn {
+  flex: none;
+  margin-left: 20rpx;
+  padding: 8rpx 28rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid var(--wte-line);
+  background: #ffffff;
+  font-size: var(--wte-fs-sm);
+  color: var(--wte-text-weak);
+}
+
+/* 管理态下卡片可点选，给一点边界暗示 */
+.order-card--manage {
+  border: 2rpx solid transparent;
+}
+
+.order-card--selected {
+  border-color: var(--wte-warn);
+  background: #fffaf3;
+}
+
+/* 未关闭的点单不可删除：整卡降饱和，避免用户误以为是可选项 */
+.order-card--locked {
+  opacity: 0.55;
+}
+
+.order-card__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-card__locked {
+  color: var(--wte-warn);
+}
+
+/* 勾选框 */
+.checkbox {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 20rpx;
+  border-radius: 50%;
+  border: 2rpx solid #d9cdc0;
+  background: #ffffff;
+  font-size: 24rpx;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.checkbox--on {
+  border-color: var(--wte-warn);
+  background: var(--wte-warn);
+}
+
+.checkbox--disabled {
+  background: #f4efe9;
+  border-color: #e5dbd0;
+}
+
+/* 底部：全选 + 删除 */
+.manage-bar {
+  display: flex;
+  align-items: center;
+}
+
+.manage-bar__all {
+  flex: none;
+  padding: 0 28rpx 0 4rpx;
+  font-size: var(--wte-fs-base);
+  color: var(--wte-text-weak);
+}
+
+.manage-bar__del {
+  flex: 1;
+}

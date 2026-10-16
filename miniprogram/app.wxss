@@ -30,6 +30,10 @@ page {
   --wte-text-faint: #a99a8b;
   --wte-line: #f0e7de;
   --wte-fill: #faf6f0;
+  /* 破坏性操作（删除）与「需采购」一类需要注意的提示统一用橙色 */
+  --wte-warn: #e8850c;
+  --wte-warn-bg: #fff4e6;
+  --wte-warn-line: #ffddb0;
 
   /* ---- 字号层级：全站统一，避免各页面各写一套大小 ---- */
   --wte-fs-caption: 22rpx;  /* 角标、辅助说明 */
@@ -158,6 +162,13 @@ page {
 .wte-btn--plain {
   background: #fff1e9;
   color: #d95f2f;
+}
+
+/* 破坏性操作（删除）：橙色标注，与主操作、普通操作都区分开 */
+.wte-btn--danger {
+  background: var(--wte-warn-bg);
+  border: 2rpx solid var(--wte-warn-line);
+  color: var(--wte-warn);
 }
 
 .wte-btn--block {

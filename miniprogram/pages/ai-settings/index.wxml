@@ -51,12 +51,12 @@
       </block>
     </view>
 
-    <!-- 自定义配置表单（可折叠） -->
-    <block wx:if="{{customFormOpen}}">
+    <!-- 自定义配置（仅自定义模式展示） -->
+    <block wx:if="{{mode === 'custom'}}">
+      <!-- 保存成功提示 -->
       <view class="card">
         <view class="card__section-header">
           <view class="card__section-title">自定义 API 配置</view>
-          <view class="card__section-toggle" wx:if="{{mode !== 'custom'}}" bindtap="onToggleCustomForm">收起</view>
         </view>
 
         <!-- 2. 已保存成功提示 -->
@@ -139,14 +139,6 @@
         </view>
       </view>
     </block>
-
-    <!-- 收起状态：只显示一条入口 -->
-    <view class="card" wx:elif="{{mode !== 'custom'}}">
-      <view class="card__section-header" bindtap="onToggleCustomForm">
-        <view class="card__section-title">自定义 API 配置</view>
-        <view class="card__section-toggle">展开</view>
-      </view>
-    </view>
 
     <view class="tips">
       <view class="tips__title">说明</view>
