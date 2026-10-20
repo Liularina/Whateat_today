@@ -1,0 +1,69 @@
+<!-- AI 做饭机器人对话页 -->
+<view class="page">
+  <!-- 消息列表 -->
+  <scroll-view
+    class="chat-list"
+    scroll-y
+    scroll-top="{{scrollTop}}"
+    scroll-with-animation="{{true}}"
+  >
+    <view class="chat-empty" wx:if="{{messages.length === 0 && !loading}}">
+      <view class="chat-robot-icon"></view>
+      <view class="chat-welcome">
+        你好呀！我是你的 AI 做饭小助手～
+        家里有什么食材，或者今天想吃什么，都可以告诉我。
+      </view>
+      <view class="chat-quick-asks">
+        <view class="chat-quick-ask" bindtap="onTapQuick" data-text="鸡蛋和西红柿可以做什么？">鸡蛋和西红柿可以做什么？</view>
+        <view class="chat-quick-ask" bindtap="onTapQuick" data-text="今天晚饭吃什么好？">今天晚饭吃什么好？</view>
+        <view class="chat-quick-ask" bindtap="onTapQuick" data-text="鸡胸肉怎么做才嫩？">鸡胸肉怎么做才嫩？</view>
+        <view class="chat-quick-ask" bindtap="onTapQuick" data-text="有没有 15 分钟能做好的菜？">有没有 15 分钟能做好的菜？</view>
+        <view class="chat-quick-ask" bindtap="onTapQuick" data-text="豆腐和青菜还能怎么搭配？">豆腐和青菜还能怎么搭配？</view>
+      </view>
+    </view>
+
+    <block wx:for="{{messages}}" wx:key="id">
+      <!-- 用户消息 -->
+      <view class="chat-msg chat-msg--user" wx:if="{{item.role === 'user'}}">
+        <view class="chat-msg__bubble chat-msg__bubble--user">{{item.content}}</view>
+      </view>
+      <!-- 机器人消息 -->
+      <view class="chat-msg chat-msg--bot" wx:else>
+        <view class="chat-msg__avatar"></view>
+        <view class="chat-msg__bubble chat-msg__bubble--bot">{{item.content}}</view>
+      </view>
+    </block>
+
+    <!-- 加载中 -->
+    <view class="chat-msg chat-msg--bot" wx:if="{{loading}}">
+      <view class="chat-msg__avatar"></view>
+      <view class="chat-msg__bubble chat-msg__bubble--bot chat-msg__bubble--typing">
+        <view class="typing-dot"></view>
+        <view class="typing-dot"></view>
+        <view class="typing-dot"></view>
+      </view>
+    </view>
+
+    <!-- 错误提示 -->
+    <view class="chat-error" wx:if="{{error && !loading}}">
+      <text>{{error}}</text>
+      <view class="chat-retry" bindtap="onRetry">重试</view>
+    </view>
+  </scroll-view>
+
+  <!-- 底部输入栏 -->
+  <view class="chat-input-bar">
+    <view class="chat-input-row">
+      <input
+        class="chat-input"
+        value="{{inputText}}"
+        placeholder="输入做饭问题..."
+        maxlength="{{600}}"
+        bindinput="onInput"
+      />
+      <view class="chat-send-btn {{inputText ? 'chat-send-btn--active' : ''}}" bindtap="onSend">
+        发送
+      </view>
+    </view>
+  </view>
+</view>

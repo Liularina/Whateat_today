@@ -125,6 +125,7 @@ App<IAppOption>({
     lastRecommendResult: null,
     currentMenuId: '',
     profileSetupDone: false,
+    pendingMenuTab: '',
   },
 
   onLaunch() {

@@ -1,0 +1,38 @@
+<!-- 语音录入组件 -->
+<view class="vi">
+  <!-- 空闲状态：录音按钮 -->
+  <view class="vi__btn" wx:if="{{status === 'idle'}}" bindtap="onStartRecord">
+    <text class="vi__icon">🎤</text>
+    <text class="vi__label">{{btnLabel}}</text>
+  </view>
+
+  <!-- 录音中 -->
+  <view class="vi__recording" wx:if="{{status === 'recording'}}">
+    <view class="vi__wave">
+      <view class="vi__wave-bar" wx:for="{{8}}" wx:key="*this" style="animation-delay: {{item * 0.1}}s;"></view>
+    </view>
+    <text class="vi__hint">正在聆听...</text>
+    <view class="vi__stop-btn" bindtap="onStopRecord">停止</view>
+  </view>
+
+  <!-- 识别成功：展示结果 + 填入按钮 -->
+  <view class="vi__result" wx:if="{{status === 'done'}}">
+    <view class="vi__result-header">
+      <text class="vi__icon-small">✅</text>
+      识别结果
+      <view class="vi__retry" bindtap="onStartRecord">重新说</view>
+    </view>
+    <view class="vi__result-text">{{recognizedText}}</view>
+    <view class="vi__fill-btn" bindtap="onFill" wx:if="{{recognizedText}}">填入表单</view>
+  </view>
+
+  <!-- 识别失败 -->
+  <view class="vi__result vi__result--error" wx:if="{{status === 'error'}}">
+    <view class="vi__result-header">
+      <text class="vi__icon-small">⚠️</text>
+      识别失败
+      <view class="vi__retry" bindtap="onStartRecord">重试</view>
+    </view>
+    <view class="vi__result-text">{{errorMsg || '语音识别失败，请重试或手动输入'}}</view>
+  </view>
+</view>

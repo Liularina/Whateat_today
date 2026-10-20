@@ -1,0 +1,5 @@
+{"event":"ai_call","userId":"u1","action":"chat","requestId":"","mode":"builtin","quotaUsed":1,"quotaRemaining":49,"status":"success","duration":2}
+{"event":"ai_call","userId":"u1","action":"chat","requestId":"","mode":"builtin","quotaUsed":1,"quotaRemaining":49,"status":"fail","code":"AI_QUOTA_EXCEEDED","error":"quota","duration":1}
+{"event":"ai_call","userId":"u1","action":"chat","requestId":"","mode":"builtin","quotaUsed":1,"quotaRemaining":49,"status":"success","duration":0}
+
+chat 云函数验证：33 通过，0 失败

@@ -385,8 +385,8 @@ Phase C 将「内置 AI」（开箱即用）加入项目，与已有的用户自
 - **`getRecipe` 入参**：`{ recipeId }`，返回 `{ recipe }`。
   `recipeId` 缺失或非法 → `INVALID_PARAMS`；不存在**或已禁用** →
   `RECIPE_NOT_FOUND`（两种情况同一个错误码，不泄露某个菜谱是否存在）。
-- **内置数据**：`cloudfunctions/recipe/recipe-data.js` 共 **33 道**菜谱，
-  分「家常菜 / 蔬菜类 / 汤类 / 主食类」四类，每道含简介、标签、难度、总时长、
+- **内置数据**：`cloudfunctions/recipe/recipe-data.js` 共 **150 道**菜谱，
+  （家常菜 45 / 蔬菜类 40 / 汤类 35 / 主食类 30），每道含简介、标签、难度、总时长、
   适用人数、量化食材与逐道编写的步骤（每步带独立 `minutes`）。
   两条硬性约束：
   - **不允许「适量 / 少许」这类无法换算的写法** —— 否则 Phase 7 无法复用营养数据；

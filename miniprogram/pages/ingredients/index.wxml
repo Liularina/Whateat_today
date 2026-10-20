@@ -104,7 +104,10 @@
 
   <scroll-view class="sheet__body" scroll-y>
     <view class="field">
-      <view class="field__label">名称</view>
+      <view class="field__label">
+        <text>名称</text>
+        <text class="field__label-extra" wx:if="{{!voiceSupported}}">（不支持语音）</text>
+      </view>
       <input
         class="field__input"
         value="{{formName}}"
@@ -112,6 +115,31 @@
         maxlength="20"
         bindinput="onNameInput"
       />
+      <!-- 语音录入（填入名称+数量+单位） -->
+      <view class="field__voice-section" wx:if="{{voiceSupported}}">
+        <voice-input
+          id="voiceInput"
+          btn-label="语音录入"
+          bind:recognized="onVoiceRecognized"
+        />
+      </view>
+      <!-- 多食材识别候选列表 -->
+      <view class="voice-candidates" wx:if="{{voiceCandidates.length > 0}}">
+        <view class="voice-candidates__header">
+          <text>识别到 {{voiceCandidates.length}} 种食材，点击逐条填入</text>
+          <view class="voice-candidates__clear" bindtap="onClearVoiceCandidates">清除</view>
+        </view>
+        <view
+          class="voice-candidate"
+          wx:for="{{voiceCandidates}}"
+          wx:key="index"
+          bindtap="onTapVoiceCandidate"
+          data-index="{{index}}"
+        >
+          <text class="voice-candidate__name">{{item.name}}</text>
+          <text class="voice-candidate__qty" wx:if="{{item.quantity !== null}}">{{item.quantity}}{{item.unit || ''}}</text>
+        </view>
+      </view>
     </view>
 
     <view class="field">

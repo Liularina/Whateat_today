@@ -11,6 +11,19 @@
   opacity: 0.9;
 }
 
+/* 手绘插画 */
+.empty-state__icon {
+  width: 176rpx;
+  height: 176rpx;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.empty-state__icon--plate {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiI+PGVsbGlwc2UgY3g9IjQ4IiBjeT0iODUiIHJ4PSIyOSIgcnk9IjUiIGZpbGw9IiNmMGUwZDMiIG9wYWNpdHk9IjAuOSIvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iNDUiIHI9IjQwIiBmaWxsPSIjZjVlNmRhIi8+PGNpcmNsZSBjeD0iNDgiIGN5PSI0MyIgcj0iNDAiIGZpbGw9IiNmZmZmZmYiLz48Y2lyY2xlIGN4PSI0OCIgY3k9IjQzIiByPSIzMSIgZmlsbD0iI2ZmZmFmNSIgc3Ryb2tlPSIjZmZlMmNlIiBzdHJva2Utd2lkdGg9IjMiLz48cGF0aCBkPSJNMjMgNDljMC0xMSAxMS0xNyAyNS0xN3MyNSA2IDI1IDE3YzAgNy0xMSAxMS0yNSAxMXMtMjUtNC0yNS0xMXoiIGZpbGw9IiNmZmY1ZTIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9IjQxIiByPSI3IiBmaWxsPSIjZmY4YTVjIi8+PGNpcmNsZSBjeD0iNTEiIGN5PSIzNyIgcj0iNiIgZmlsbD0iI2ZmYzk0ZCIvPjxjaXJjbGUgY3g9IjU3IiBjeT0iNDgiIHI9IjciIGZpbGw9IiNmZjhhNWMiLz48Y2lyY2xlIGN4PSI0NCIgY3k9IjUxIiByPSI2IiBmaWxsPSIjZmZjOTRkIi8+PHBhdGggZD0iTTI4IDUzYzItNiA4LTkgMTItNy0xIDYtNiAxMC0xMiA3eiIgZmlsbD0iIzdmYzk2YSIvPjxwYXRoIGQ9Ik02OCA1M2MtMi02LTgtOS0xMi03IDEgNiA2IDEwIDEyIDd6IiBmaWxsPSIjNWJiNDU0Ii8+PGNpcmNsZSBjeD0iNDgiIGN5PSIzMSIgcj0iMy40IiBmaWxsPSIjZmZlMDhhIi8+PC9zdmc+");
+}
+
 .empty-state__title {
   margin-top: 24rpx;
   font-size: 32rpx;

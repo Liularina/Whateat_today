@@ -1,7 +1,7 @@
 /**
  * 内置菜谱初始化（Phase 6）
  *
- * 把 recipe-data.js 里的 33 道基础菜谱写入云数据库 recipes 集合。
+ * 把 recipe-data.js 里的 150 道基础菜谱写入云数据库 recipes 集合。
  *
  * 幂等性（规范第 5 章要求）：
  *   - 以 name 作为内置菜谱的业务唯一键：

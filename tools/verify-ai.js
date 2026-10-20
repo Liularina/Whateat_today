@@ -26,9 +26,9 @@ const db = mock.mockCloud.database();
 
 const ROOT = path.join(__dirname, '..');
 const CF = path.join(ROOT, 'cloudfunctions');
-const AI_DIRS = ['ai-config', 'menu', 'recipe', 'recommend'];
+const AI_DIRS = ['ai-config', 'chat', 'menu', 'recipe', 'recommend'];
 /** 真正会调用模型的云函数（ai-config 只做配置与连通测试，不算业务调用方） */
-const AI_CALLERS = ['menu', 'recipe', 'recommend'];
+const AI_CALLERS = ['chat', 'menu', 'recipe', 'recommend'];
 
 const clientPath = (dir) => path.join(CF, dir, 'openai-compatible-client.js');
 const servicePath = (dir) => path.join(CF, dir, 'ai-service.js');

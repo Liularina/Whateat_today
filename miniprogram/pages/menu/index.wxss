@@ -423,3 +423,84 @@
   font-size: 24rpx;
   color: #d4c5b5;
 }
+
+/* 月/周统计 */
+.cal-stats {
+  margin-top: 24rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: var(--wte-card);
+}
+
+.cal-stats__title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+  margin-bottom: 16rpx;
+}
+
+.cal-stats__row {
+  display: flex;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+
+.cal-stats__item {
+  flex: 1;
+  min-width: 140rpx;
+  text-align: center;
+  padding: 16rpx 12rpx;
+  border-radius: 12rpx;
+  background: #faf6f0;
+}
+
+.cal-stats__num {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.cal-stats__label {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: var(--wte-text-weak);
+}
+
+.cal-stats__warn {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #d97706;
+}
+
+/* 日统计 */
+.cal-day-stats {
+  text-align: center;
+  padding: 20rpx 0 28rpx;
+  border-bottom: 1rpx solid #f0e4da;
+  margin-bottom: 20rpx;
+}
+
+.cal-day-stats__total {
+  font-size: 40rpx;
+  font-weight: 800;
+  color: #ff7a45;
+}
+
+.cal-day-stats__row {
+  display: flex;
+  justify-content: center;
+  gap: 20rpx;
+  margin-top: 10rpx;
+}
+
+.cal-day-stats__macro {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.cal-day-stats__warn {
+  display: inline-block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #d97706;
+}

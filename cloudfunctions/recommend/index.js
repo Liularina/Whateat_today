@@ -21,6 +21,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 
+const _ = db.command;
+
 const {
   chatCompletion,
   extractJson,
@@ -66,6 +68,14 @@ function toIsoString(date) {
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return '';
   return d.toISOString();
+}
+
+/** 在 YYYY-MM-DD 基础上加天数，用于计算临期区间 */
+function shiftDate(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00.000Z');
+  if (isNaN(d.getTime())) return dateStr;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 /* ============================== 食材过期过滤（Phase B） ============================== */
@@ -134,10 +144,20 @@ const MAX_CANDIDATES = 50;
 
 /**
  * 真正写进提示词的候选数量。
- * 候选列表已按食材匹配度降序排列，取前 N 条即可；全部塞进去会明显拖慢预填充，
- * 对选菜质量帮助有限。
+ * 取前 N 条即可；全部塞进去会明显拖慢预填充，对选菜质量帮助有限。
+ * 取 40（而非更少）是为了给模型足够的换菜空间：候选太窄时，
+ * 模型只能在小批常见菜里反复选择。
  */
-const MAX_PROMPT_CANDIDATES = 25;
+const MAX_PROMPT_CANDIDATES = 40;
+
+/** 近期菜单回看的自然日天数 */
+const RECENT_MENU_DAYS = 7;
+
+/** 最多读取几份近期菜单 */
+const MAX_RECENT_MENUS = 10;
+
+/** 近期做过的菜仍保留少量在候选末尾，供用户「明确想吃」时使用 */
+const RECENT_CANDIDATE_LIMIT = 5;
 
 /** 每次推荐的菜单套数 */
 const MENU_COUNT = 3;
@@ -159,7 +179,7 @@ const MEAL_TYPE_LABELS = {
  * 将菜谱文档转为 AI 提示词用的精简摘要。
  * 只包含 AI 选菜需要的信息，不包含完整步骤。
  */
-function toCandidateSummary(recipe, inventoryNames) {
+function toCandidateSummary(recipe, inventoryNames, recentIds) {
   const ingredientNames = (recipe.ingredients || []).map((i) => i.name);
   const matched = ingredientNames.filter((n) => inventoryNames.has(n));
   const missing = ingredientNames.filter((n) => !inventoryNames.has(n));
@@ -176,7 +196,119 @@ function toCandidateSummary(recipe, inventoryNames) {
     totalIngredients: ingredientNames.length,
     matchedIngredients: matched.length,
     missingIngredients: missing,
+    // 近 7 天是否已经做过：只作为模型判断依据，不落库、不返回前端
+    recentlyUsed: recentIds ? recentIds.has(recipe._id) : false,
   };
+}
+
+/**
+ * 读取该家庭最近 7 天的菜单记录。
+ * 集合缺失时降级为空数组——历史菜单只是推荐的辅助信息，不能阻断推荐。
+ */
+async function loadRecentMenus(familyId) {
+  const since = new Date(Date.now() - RECENT_MENU_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const result = await db.collection('menus')
+      .where({ familyId, createdAt: _.gte(since) })
+      .orderBy('createdAt', 'desc')
+      .limit(MAX_RECENT_MENUS)
+      .get();
+    return result.data || [];
+  } catch (e) {
+    // 历史菜单只用于避免重复，任何读取问题都降级为空，不阻断推荐
+    if (!isCollectionMissing(e)) {
+      console.warn('[recommend] 读取近期菜单失败，已跳过历史去重', e && e.message);
+    }
+    return [];
+  }
+}
+
+/** 近期菜单里出现过的 recipeId，用于给候选打 recentlyUsed 标记 */
+function collectRecentIds(recentMenus) {
+  const ids = new Set();
+  (recentMenus || []).forEach((menu) => {
+    (menu.items || []).forEach((item) => {
+      if (item && item.recipeId) ids.add(item.recipeId);
+    });
+  });
+  return ids;
+}
+
+/**
+ * 近期菜单摘要：只保留日期、餐次、菜名和主要食材。
+ * 不传完整菜品结构与做法，避免提示词过长。
+ */
+function summarizeRecentMenus(recentMenus) {
+  const seen = new Set();
+  const list = [];
+  (recentMenus || []).forEach((menu) => {
+    const dishes = (menu.items || [])
+      .map((item) => (item && item.name ? String(item.name).trim() : ''))
+      .filter(Boolean);
+    if (dishes.length === 0) return;
+
+    const date = (menu.createdAt || '').slice(0, 10);
+    const key = date + '|' + dishes.join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const ingredients = [];
+    (menu.items || []).forEach((item) => {
+      (item.ingredients || []).forEach((ing) => {
+        const name = (ing && ing.name ? String(ing.name).trim() : '');
+        if (name && name.indexOf('适量') === -1 && ingredients.indexOf(name) === -1) {
+          ingredients.push(name);
+        }
+      });
+    });
+
+    list.push({
+      date: date,
+      mealType: menu.mealType || '',
+      dishes: dishes.slice(0, 5),
+      mainIngredients: ingredients.slice(0, 8),
+    });
+  });
+  return list;
+}
+
+/** 把字符串散列成非负整数，用于让不同请求拿到不同候选顺序 */
+function hashSeed(text) {
+  const source = String(text || '');
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) {
+    hash = (hash * 31 + source.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/** 按 seed 旋转数组：内容不变，只改变顺序 */
+function rotateList(list, seed) {
+  if (!list || list.length <= 1) return list || [];
+  const offset = seed % list.length;
+  if (offset === 0) return list.slice();
+  return list.slice(offset).concat(list.slice(0, offset));
+}
+
+/**
+ * 从候选池中挑出写进提示词的菜品。
+ *
+ * 直接取「匹配度前 40」会让番茄蛋汤这类高匹配常见菜长期占据列表头部，
+ * 模型因此反复推荐它们。这里改为：
+ *   1. 高匹配的前 60% 固定保留，保证库存利用率；
+ *   2. 剩余名额从其余候选里按请求种子轮转抽取，扩大选择面；
+ *   3. 最终整体再轮转一次，削弱模型的位置偏好。
+ */
+function pickPromptCandidates(candidates, limit, seed) {
+  if (!candidates || candidates.length <= limit) {
+    return rotateList(candidates || [], seed);
+  }
+
+  const headCount = Math.max(1, Math.ceil(limit * 0.5));
+  const head = candidates.slice(0, headCount);
+  const rest = rotateList(candidates.slice(headCount), seed);
+  const picked = head.concat(rest.slice(0, limit - headCount));
+  return rotateList(picked, seed);
 }
 
 /**
@@ -265,15 +397,18 @@ async function handleRecommendMenus(event, wxContext) {
   const preferences = (event.preferences || '').trim();
   const excludeIds = new Set((event.excludeRecipeIds || []).filter((id) => typeof id === 'string' && id.length > 0));
 
-  // 3. 读取家庭食材
+  // 3. 读取家庭食材、菜谱库与近期菜单
   let ingredients;
   let recipes;
+  let recentMenuIds = new Set();
+  let recentMenusForPrompt = [];
 
   // 3 + 4. 食材与菜谱库互不依赖，并行读取，省一次数据库往返（对 AI 调用前的等待时间敏感）
   try {
-    const [ingResult, recipeResult] = await Promise.all([
+    const [ingResult, recipeResult, recentResult] = await Promise.all([
       db.collection('ingredients').where({ familyId }).limit(200).get(),
       db.collection('recipes').where({ source: 'builtin', isActive: true }).limit(200).get(),
+      loadRecentMenus(familyId),
     ]);
 
     // Phase B：已过期的食材不参与推荐，避免拿坏掉的菜去匹配
@@ -284,6 +419,11 @@ async function handleRecommendMenus(event, wxContext) {
       console.log('[recommend] 已跳过 ' + filtered.skipped + ' 种过期食材');
     }
     recipes = recipeResult.data || [];
+
+    const recentIds = collectRecentIds(recentResult);
+    const recentSummary = summarizeRecentMenus(recentResult);
+    recentMenuIds = recentIds;
+    recentMenusForPrompt = recentSummary;
   } catch (e) {
     if (isCollectionMissing(e)) {
       // 无法区分是哪个集合缺失时，给出包含两者的提示
@@ -309,38 +449,75 @@ async function handleRecommendMenus(event, wxContext) {
   }
 
   // 5. 生成候选列表（只用安全菜谱）
-  const candidates = dietFiltered.kept
+  //    近 7 天已经做过的菜排到末尾：仍保留少量，供「用户明确想吃」时选择，
+  //    但不再占据候选前列。
+  const scored = dietFiltered.kept
     .filter((r) => !excludeIds.has(r._id))
-    .map((r) => toCandidateSummary(r, inventoryNames))
+    .map((r) => toCandidateSummary(r, inventoryNames, recentMenuIds))
     .sort((a, b) => {
-      // 优先食材匹配度高的
       const aScore = a.totalIngredients > 0 ? a.matchedIngredients / a.totalIngredients : 0;
       const bScore = b.totalIngredients > 0 ? b.matchedIngredients / b.totalIngredients : 0;
       return bScore - aScore;
-    })
-    .slice(0, MAX_CANDIDATES);
+    });
+
+  const freshCandidates = scored.filter((c) => !c.recentlyUsed).slice(0, MAX_CANDIDATES);
+  const recentCandidates = scored.filter((c) => c.recentlyUsed).slice(0, RECENT_CANDIDATE_LIMIT);
+  const candidates = freshCandidates.concat(recentCandidates);
 
   if (candidates.length === 0) {
     return fail('NO_CANDIDATES', '没有找到可推荐的菜谱');
   }
 
+  // 只把一部分候选写进提示词，并按请求变化轮转，避免模型长期只看到同一批常见菜；
+  // 近期菜固定放在末尾，并带 recentlyUsed 标记。
+  const freshQuota = Math.max(1, MAX_PROMPT_CANDIDATES - recentCandidates.length);
+  const promptCandidates = pickPromptCandidates(
+    freshCandidates,
+    freshQuota,
+    hashSeed(event.requestId || String(Date.now())),
+  ).concat(recentCandidates);
+
   // 6. 构建 AI 提示词
+  //    库存数量字段是 quantity（不是 amount），否则会全部显示 0，模型无法判断余量
   const inventoryList = ingredients
-    .map((i) => `${i.standardName || i.name}（${i.amount || 0}${i.unit || 'g'}）`)
+    .map((i) => {
+      const quantity = i.quantity !== undefined ? i.quantity : (i.amount || 0);
+      return (i.standardName || i.name) + '（' + quantity + (i.unit || 'g') + '）';
+    })
     .join('、') || '暂无食材';
 
+  // 临期食材（3 天内到期，已过期的在读取阶段被过滤掉）
+  const today = todayInBeijing();
+  const expiringList = ingredients
+    .filter((i) => i.expireDate && i.expireDate >= today && i.expireDate <= shiftDate(today, 3))
+    .map((i) => i.standardName || i.name)
+    .join('、') || '无';
+
   const systemPrompt = [
-    '你是一个家庭饮食推荐助手。',
-    '请根据以下信息，从提供的候选菜谱中选择菜品，推荐 ' + MENU_COUNT + ' 套不同的菜单组合。',
+    '你是一名家庭饮食规划助手。',
+    '请根据本次家庭需求、餐次、冰箱可用食材、烹饪条件和历史菜单，从候选菜谱中选择菜品，推荐 ' + MENU_COUNT + ' 套合理、多样、实际可做的家常菜单。',
     '',
-    '要求：',
+    '【多样性要求】',
+    buildRequirementText([
+      '不要默认推荐番茄炒蛋、番茄鸡蛋汤、番茄蛋汤等常见菜，也不要在多套菜单里重复同一道菜；',
+      '同一套菜单里，最多出现 1 道以鸡蛋为主要蛋白质的菜，最多 1 道番茄类菜品，避免食材组合雷同；',
+      '番茄和鸡蛋是正常食材，可以推荐，但不能因为常见或库存里有就反复组合成番茄鸡蛋类菜品；',
+      '先检查「最近菜单」：尽量避开近 7 天出现过的菜；不仅比较菜名，还要比较主要食材和烹饪方式是否高度相似；',
+      '「番茄炒蛋 / 西红柿炒鸡蛋」「番茄蛋汤 / 番茄鸡蛋汤 / 西红柿蛋汤」视为同一道菜；',
+      '候选充足时，优先选择与近期菜单不同的菜，并在合理范围内改变蛋白质来源、蔬菜搭配和烹饪方式；',
+      '用户本次明确提出的菜品优先，以上多样性规则不得覆盖用户的明确要求；',
+      '不得为了追求变化而推荐不合理、不符合家庭口味或无法实际制作的菜。',
+    ]),
+    '',
+    '【搭配与库存要求】',
     buildRequirementText([
       '每套菜单包含 1~3 道菜，尽量荤素搭配；',
-      '优先选择能利用现有食材的菜谱（matchedIngredients 越多的越好）；',
+      '在不违反多样性的前提下，优先选择能利用现有食材的菜谱（matchedIngredients 越多的越好）；',
       '结合餐次（' + MEAL_TYPE_LABELS[mealType] + '）选择合适菜品；',
       '现有食材不足以组成完整菜单时，可以推荐需要额外采购食材的菜谱；',
       '额外采购的食材应是常见易买的，且每套菜单新增食材尽量少；',
       '三套菜单之间菜品不重复，且尽量覆盖不同的现有食材；',
+      '不得虚构库存中不存在的食材；缺少关键食材的菜品需要如实标注为需采购。',
     ], [
       preferences ? '遵守以下饮食偏好：' + preferences : '',
       tasteHint ? '家庭口味偏好：' + tasteHint : '',
@@ -352,14 +529,24 @@ async function handleRecommendMenus(event, wxContext) {
         : '',
     ]),
     '',
+    '输出前请在内部检查：是否与近期菜单重复、是否多道菜食材组合雷同、是否因常见菜偏好而过度推荐番茄鸡蛋类菜品。检查过程不必输出。',
     '只输出 JSON，不要输出解释、Markdown 代码围栏或其他内容。',
   ].join('\n');
 
   const userPrompt = [
     '当前家庭食材：' + inventoryList,
+    '临期食材（3 天内到期，可优先使用，但不得虚构）：' + expiringList,
+    '',
+    '最近 ' + RECENT_MENU_DAYS + ' 天菜单（用于避免重复，可能为空）：',
+    JSON.stringify(recentMenusForPrompt),
+    '',
+    '请结合最近菜单历史，尽量避免重复近期出现的菜品及相似食材组合。',
+    '不要默认推荐番茄炒蛋、番茄鸡蛋汤等常见菜。番茄和鸡蛋可以正常使用，但不能因为其常见而反复推荐。',
+    '候选中的 recentlyUsed=true 表示近 7 天已经做过，除非用户明确要求，否则优先选择其他菜。',
+    '请根据本次库存、家庭需求和历史菜单重新选择合理的菜品。',
     '',
     '候选菜谱列表（JSON）：',
-    JSON.stringify(candidates.slice(0, MAX_PROMPT_CANDIDATES).map((c) => ({
+    JSON.stringify(promptCandidates.map((c) => ({
       id: c.id,
       name: c.name,
       category: c.category,
@@ -369,6 +556,7 @@ async function handleRecommendMenus(event, wxContext) {
       ingredients: c.ingredients,
       matchedIngredients: c.matchedIngredients,
       missingIngredients: c.missingIngredients,
+      recentlyUsed: c.recentlyUsed,
     }))),
     '',
     '请以 JSON 格式返回 ' + MENU_COUNT + ' 套菜单，格式如下：',
@@ -437,17 +625,23 @@ async function handleRecommendMenus(event, wxContext) {
 
   let blockedAfterAi = 0;
   const validMenus = [];
+  // 跨菜单去重：同一道菜不在多套菜单里重复出现，避免「三套菜单看起来一模一样」
+  const usedAcrossMenus = new Set();
   for (const menu of parsed.menus) {
     if (!menu.title || !Array.isArray(menu.recipeIds)) continue;
 
     // 校验每个 recipeId 都在安全候选里；命中过敏原 / 忌口的一律丢弃并计数
-    const validIds = menu.recipeIds.filter((id) => {
+    const validIds = [];
+    for (const id of menu.recipeIds) {
       if (blockedIds.has(id)) {
         blockedAfterAi += 1;
-        return false;
+        continue;
       }
-      return !!recipeMap[id];
-    });
+      if (!recipeMap[id]) continue;
+      if (usedAcrossMenus.has(id)) continue;
+      usedAcrossMenus.add(id);
+      validIds.push(id);
+    }
     if (validIds.length === 0) continue;
 
     const items = validIds.map((id) => toRecipeView(recipeMap[id]));

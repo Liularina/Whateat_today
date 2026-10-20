@@ -34,6 +34,9 @@ interface CalendarDayCell {
     mealTypeLabel: string;
     dishCount: number;
     totalCalories: number;
+    totalProtein: number;
+    totalFat: number;
+    totalCarbs: number;
     kcalLabel: string;
     nutritionStatus: string;
   }[];
@@ -52,6 +55,28 @@ interface WeekDayBar {
   kcalLabel: string;
   menuCount: number;
   nutritionStatus: string;
+}
+
+/** 周统计汇总 */
+interface WeekStats {
+  totalCalories: number;
+  totalProtein: number;
+  totalFat: number;
+  totalCarbs: number;
+  daysWithMenu: number;
+  avgCalories: number;
+  isPartial: boolean;
+}
+
+/** 月统计汇总 */
+interface MonthStats {
+  totalCalories: number;
+  totalProtein: number;
+  totalFat: number;
+  totalCarbs: number;
+  daysWithMenu: number;
+  avgCalories: number;
+  isPartial: boolean;
 }
 
 /* --------------------- 常量 --------------------- */
@@ -126,6 +151,12 @@ Page({
     selectedDate: '',
     selectedDateLabel: '',
     selectedDayMenus: [] as HistoryMenuView[],
+    /** 选中日的营养统计 */
+    selectedDayStats: null as WeekStats | null,
+
+    /* 月/周统计 */
+    monthStats: null as MonthStats | null,
+    weekStats: null as WeekStats | null,
 
     hasFamily: false,
   },
@@ -155,6 +186,14 @@ Page({
 
   onShow() {
     const app = getApp<IAppOption>();
+
+    // 首页「历史菜单」通过 switchTab 进入，需要用全局标记指定落地 tab
+    const pendingTab = app.globalData.pendingMenuTab;
+    if (pendingTab) {
+      app.globalData.pendingMenuTab = '';
+      this.setData({ activeTab: pendingTab as MenuTab });
+    }
+
     this.applyAuthState(app.getAuthState());
     this.applyFamilyState(app.getFamilyState());
   },
@@ -304,13 +343,18 @@ Page({
       const menus = result.items || [];
       const days = this.buildMonthGrid(year, month, menus);
       const weekBars = this.buildWeekBars(menus);
+      const monthStats = this.buildMonthStats(menus);
+      const weekStats = this.buildWeekStats(menus);
 
       this.setData({
         calendarLoading: false,
         calendarDays: days,
         weekBars: weekBars,
+        monthStats: monthStats,
+        weekStats: weekStats,
         selectedDayMenus: [],
         selectedDate: '',
+        selectedDayStats: null,
       });
     } catch (e) {
       this.setData({ calendarLoading: false });
@@ -388,7 +432,10 @@ Page({
         mealType: m.mealType,
         mealTypeLabel: MEAL_TYPE_LABELS[m.mealType] || m.mealType,
         dishCount: m.dishCount,
-        totalCalories: m.totalCalories || 0,
+        totalCalories: Math.round(m.totalCalories || 0),
+        totalProtein: Math.round(m.totalProtein || 0),
+        totalFat: Math.round(m.totalFat || 0),
+        totalCarbs: Math.round(m.totalCarbs || 0),
         kcalLabel: m.totalCalories > 0 ? formatKcal(m.totalCalories) : '',
         nutritionStatus: m.nutritionStatus || 'unknown',
       })),
@@ -468,6 +515,64 @@ Page({
     this.setData({ calendarMode: mode });
   },
 
+  /** 构建周统计 */
+  buildWeekStats(menus: MenuListItem[]): WeekStats | null {
+    const today = new Date();
+    const todayDayOfWeek = today.getDay();
+    const mondayOffset = todayDayOfWeek === 0 ? -6 : 1 - todayDayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const weekMenus = menus.filter((m) => {
+      const d = new Date(m.dateLabel);
+      return d >= monday && d <= sunday;
+    });
+
+    return this.computeStats(weekMenus);
+  },
+
+  /** 构建月统计 */
+  buildMonthStats(menus: MenuListItem[]): MonthStats | null {
+    return this.computeStats(menus);
+  },
+
+  /** 通用统计计算 */
+  computeStats(menus: MenuListItem[]): WeekStats | null {
+    if (menus.length === 0) return null;
+
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalFat = 0;
+    let totalCarbs = 0;
+    let isPartial = false;
+    const daysSet = new Set<string>();
+
+    for (const m of menus) {
+      if (m.totalCalories) totalCalories += m.totalCalories;
+      if (m.totalProtein) totalProtein += m.totalProtein;
+      if (m.totalFat) totalFat += m.totalFat;
+      if (m.totalCarbs) totalCarbs += m.totalCarbs;
+      if (m.nutritionStatus === 'partial') isPartial = true;
+      daysSet.add(m.dateLabel);
+    }
+
+    const daysWithMenu = daysSet.size;
+    // 营养统计统一取整，避免浮点累加出现无限小数
+    return {
+      totalCalories: Math.round(totalCalories),
+      totalProtein: Math.round(totalProtein),
+      totalFat: Math.round(totalFat),
+      totalCarbs: Math.round(totalCarbs),
+      daysWithMenu,
+      avgCalories: daysWithMenu > 0 ? Math.round(totalCalories / daysWithMenu) : 0,
+      isPartial,
+    };
+  },
+
   /* ============================== 日视图 ============================== */
 
   onDayTap(e: WechatMiniprogram.TouchEvent) {
@@ -475,32 +580,54 @@ Page({
     if (!date) return;
 
     // 查找当日菜单
-    const menus = this.data.calendarDays
-      .filter((d) => d.date === date)
-      .flatMap((d) => d.menus.map((m) => ({
-        _id: m._id,
-        menuId: m._id,
-        mealType: m.mealType,
-        mealTypeLabel: m.mealTypeLabel,
-        dishCount: m.dishCount,
-        totalCalories: m.totalCalories,
-        nutritionStatus: m.nutritionStatus,
-      } as HistoryMenuView)));
+    const dayCells = this.data.calendarDays.filter((d) => d.date === date);
+    const dayMenus = dayCells.flatMap((d) => d.menus.map((m) => ({
+      _id: m._id,
+      menuId: m._id,
+      mealType: m.mealType,
+      mealTypeLabel: m.mealTypeLabel,
+      dishCount: m.dishCount,
+      totalCalories: m.totalCalories,
+      totalProtein: m.totalProtein,
+      totalFat: m.totalFat,
+      totalCarbs: m.totalCarbs,
+      nutritionStatus: m.nutritionStatus,
+    } as HistoryMenuView)));
+
+    // 计算当天统计
+    let kcal = 0, protein = 0, fat = 0, carbs = 0;
+    let isPartial = false;
+    for (const m of dayMenus) {
+      if (m.totalCalories) kcal += m.totalCalories;
+      if (m.totalProtein) protein += m.totalProtein;
+      if (m.totalFat) fat += m.totalFat;
+      if (m.totalCarbs) carbs += m.totalCarbs;
+      if (m.nutritionStatus === 'partial') isPartial = true;
+    }
 
     this.setData({
       selectedDate: date,
       selectedDateLabel: date,
-      selectedDayMenus: menus.map((m) => ({
+      selectedDayMenus: dayMenus.map((m) => ({
         ...m,
         dishSummary: '',
         statusLabel: STATUS_LABELS['confirmed'] || '已确认',
         kcalLabel: m.totalCalories > 0 ? formatKcal(m.totalCalories) : '',
       })),
+      selectedDayStats: dayMenus.length > 0 ? {
+        totalCalories: Math.round(kcal),
+        totalProtein: Math.round(protein),
+        totalFat: Math.round(fat),
+        totalCarbs: Math.round(carbs),
+        daysWithMenu: 1,
+        avgCalories: Math.round(kcal),
+        isPartial,
+      } : null,
     });
   },
 
   onCloseDay() {
-    this.setData({ selectedDate: '', selectedDayMenus: [] });
+    this.setData({ selectedDate: '', selectedDayMenus: [], selectedDayStats: null });
   },
 
   /* ============================== 导航 ============================== */

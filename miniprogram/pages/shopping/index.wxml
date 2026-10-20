@@ -93,7 +93,10 @@
         class="wte-btn wte-btn--ghost footer-actions__btn {{regenerating ? 'footer-actions__btn--busy' : ''}}"
         bindtap="onRegenerate"
       >重新生成</view>
-      <view class="wte-btn wte-btn--primary footer-actions__btn" bindtap="onCopy">复制清单</view>
+      <view
+        class="wte-btn wte-btn--primary footer-actions__btn {{finishing || finished ? 'footer-actions__btn--busy' : ''}}"
+        bindtap="onFinishShopping"
+      >{{finishing ? '入库中…' : (finished ? '已入库' : '采购完毕')}}</view>
     </view>
   </view>
 </view>

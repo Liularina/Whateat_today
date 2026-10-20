@@ -65,6 +65,12 @@ export interface MenuListItem {
   dishNames: string[];
   /** Phase A：该菜单的合计热量（kcal），来自确认时的营养快照；无数据时为 0 */
   totalCalories: number;
+  /** Phase 1：该菜单的合计蛋白质（g），无数据时为 0 */
+  totalProtein: number;
+  /** Phase 1：该菜单的合计脂肪（g），无数据时为 0 */
+  totalFat: number;
+  /** Phase 1：该菜单的合计碳水（g），无数据时为 0 */
+  totalCarbs: number;
   /** Phase A：该菜单的营养计算状态 */
   nutritionStatus: 'complete' | 'partial' | 'unknown';
   createdAt: string;

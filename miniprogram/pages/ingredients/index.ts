@@ -25,6 +25,7 @@ import { getErrorMessage } from '../../utils/cloud';
 import { buildCategoryGroups, type CategoryGroup } from '../../utils/ingredient-group';
 import { SHELF_LIFE_WARNING_DAYS, toDateString } from '../../utils/shelf-life';
 import { validateIngredientInput } from '../../utils/validator';
+import { type VoiceParseItem, parseVoiceText, matchUnit } from '../../utils/voice-parser';
 
 const UNIT_VALUES: readonly string[] = UNITS.map((item) => item.value);
 const UNIT_LABELS: readonly string[] = UNITS.map((item) => item.label);
@@ -118,6 +119,12 @@ Page({
     expireHint: '',
     formError: '',
     saving: false,
+
+    /* ---- 语音录入 ---- */
+    /** 当前环境是否支持语音识别 */
+    voiceSupported: false,
+    /** 多食材语音识别的候选列表 */
+    voiceCandidates: [] as VoiceParseItem[],
   },
 
   /** 取消态订阅句柄 */
@@ -128,6 +135,9 @@ Page({
 
   onLoad() {
     const app = getApp<IAppOption>();
+
+    // 检测语音识别能力
+    this.checkVoiceSupport();
 
     // 订阅态：等到家庭态 ready 后再自动刷新，避免「加载时未就绪就一直白等」
     const authListener = () => {
@@ -841,5 +851,108 @@ Page({
       wx.hideLoading();
       wx.showToast({ title: getErrorMessage(error, '操作失败，请稍后重试'), icon: 'none' });
     }
+  },
+
+  /* ============================== 语音录入 ============================== */
+
+  /** 检测 WechatSI 插件是否可用 */
+  checkVoiceSupport() {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      requirePlugin('WechatSI');
+      this.setData({ voiceSupported: true });
+    } catch (_e) {
+      this.setData({ voiceSupported: false });
+    }
+  },
+
+  /**
+   * 语音识别完成回调。
+   * 解析文本 → 单条直接填入；多条存为候选列表。
+   */
+  onVoiceRecognized(e: WechatMiniprogram.CustomEvent<{ text: string }>) {
+    const text = (e.detail && e.detail.text) || '';
+    if (!text) return;
+
+    const items = parseVoiceText(text);
+    if (items.length === 0) {
+      wx.showToast({ title: '未识别到食材信息，请重新说', icon: 'none' });
+      return;
+    }
+
+    if (items.length === 1) {
+      // 单条 → 直接填入表单
+      this.fillFormFromVoiceItem(items[0]);
+      wx.showToast({ title: '已填入「' + items[0].name + '」', icon: 'none' });
+    } else {
+      // 多条 → 展示候选列表
+      this.setData({ voiceCandidates: items });
+    }
+  },
+
+  /** 从候选列表点击一条填入 */
+  onTapVoiceCandidate(e: WechatMiniprogram.TouchEvent) {
+    const index = Number(e.currentTarget.dataset.index);
+    const items = this.data.voiceCandidates;
+    if (Number.isNaN(index) || index < 0 || index >= items.length) return;
+
+    this.fillFormFromVoiceItem(items[index]);
+    // 移除已填入的这一条；如果全清则收起列表
+    const remaining = items.filter((_, i) => i !== index);
+    if (remaining.length === 0) {
+      // 同时重置语音组件
+      this.setData({ voiceCandidates: [] });
+      const vi = this.selectComponent('#voiceInput') as unknown as { reset: () => void } | null;
+      if (vi && typeof vi.reset === 'function') {
+        vi.reset();
+      }
+    } else {
+      this.setData({ voiceCandidates: remaining });
+    }
+    wx.showToast({ title: '已填入「' + items[index].name + '」', icon: 'none' });
+  },
+
+  /** 清空候选列表 */
+  onClearVoiceCandidates() {
+    this.setData({ voiceCandidates: [] });
+  },
+
+  /**
+   * 将解析出的食材信息填入表单。
+   * 只填尚未被用户修改过的字段（避免覆盖已有输入）。
+   */
+  fillFormFromVoiceItem(item: VoiceParseItem) {
+    const updates: Record<string, unknown> = {};
+
+    // 名称：填入（用户可修改）
+    if (item.name) {
+      updates.formName = item.name;
+    }
+
+    // 数量
+    if (item.quantity !== null) {
+      updates.formQuantity = String(item.quantity);
+    }
+
+    // 单位：匹配现有选项
+    if (item.unit) {
+      const unitIdx = matchUnit(item.unit, UNIT_VALUES);
+      const mapped = UNIT_VALUES[unitIdx];
+      // 如果是 kg 并数量小，默认用 g（一斤半=750g 而不是 1.5kg）
+      if (mapped === 'kg' && item.quantity !== null && item.quantity < 2) {
+        const grams = convertToGram(item.quantity, 'kg');
+        if (grams !== null) {
+          updates.formQuantity = String(grams);
+          updates.formUnitIndex = UNIT_VALUES.indexOf('g');
+        } else {
+          updates.formUnitIndex = unitIdx;
+        }
+      } else {
+        updates.formUnitIndex = unitIdx;
+      }
+    }
+
+    this.setData(updates);
+    this.updateQuantityHint();
   },
 });

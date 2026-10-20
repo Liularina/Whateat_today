@@ -3,7 +3,7 @@
  *
  * 纯函数，不依赖 wx API，便于复用与测试。
  */
-import { INGREDIENT_CATEGORIES, getCategoryEmoji, getCategoryLabel } from '../constants/categories';
+import { INGREDIENT_CATEGORIES, CATEGORY_DISPLAY_MAP, getCategoryEmoji, getCategoryLabel } from '../constants/categories';
 import { KCAL_PREFIX } from '../constants/config';
 import type { Ingredient, IngredientCategoryCode } from '../types/ingredient';
 import { getShelfLifeStatus, type ShelfLifeStatusCode } from './shelf-life';
@@ -64,6 +64,12 @@ const VALID_CATEGORIES: Record<string, boolean> = INGREDIENT_CATEGORIES.reduce(
   },
   {} as Record<string, boolean>,
 );
+
+/** 将历史分类码映射为展示分组码；dairy → soy_product */
+function mapToDisplayCategory(code: IngredientCategoryCode): string {
+  const mapped = CATEGORY_DISPLAY_MAP[code];
+  return mapped || code;
+}
 
 /**
  * 卡路里文案。
@@ -135,6 +141,7 @@ export function sortByShelfLife(views: IngredientView[]): IngredientView[] {
  * 按分类聚合成折叠分组。
  * 分组顺序固定跟随 INGREDIENT_CATEGORIES；空分类不展示；
  * category 不在枚举内的历史数据一律归入「其他」。
+ * dairy 在展示层归入 soy_product（蛋奶豆制品）。
  *
  * calorieMap 为可选的「食材 _id → 热量(kcal)」，由调用方从服务端结果构建。
  */
@@ -148,7 +155,8 @@ export function buildCategoryGroups(
 
   for (const item of items) {
     const view = toIngredientView(item, today, calorieMap);
-    const key = VALID_CATEGORIES[view.category] ? view.category : 'other';
+    const displayKey = mapToDisplayCategory(view.category);
+    const key = VALID_CATEGORIES[displayKey] ? displayKey : 'other';
     if (!byCategory[key]) {
       byCategory[key] = [];
     }

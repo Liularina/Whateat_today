@@ -1,0 +1,121 @@
+.vi {
+  width: 100%;
+}
+
+/* 录音按钮 */
+.vi__btn {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 20rpx;
+  background: #fff7ef;
+  border: 2rpx solid #ffe0c0;
+  border-radius: 16rpx;
+  cursor: pointer;
+}
+.vi__btn:active {
+  background: #ffe0c0;
+}
+.vi__icon {
+  font-size: 40rpx;
+  line-height: 1;
+}
+.vi__label {
+  font-size: 28rpx;
+  color: #9a8c7d;
+}
+
+/* 录音中 */
+.vi__recording {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  padding: 20rpx;
+  background: #fff0e6;
+  border-radius: 16rpx;
+}
+.vi__wave {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  height: 60rpx;
+}
+.vi__wave-bar {
+  width: 6rpx;
+  height: 20rpx;
+  background: #ff7a45;
+  border-radius: 3rpx;
+  animation: vi-wave 0.8s ease-in-out infinite alternate;
+}
+@keyframes vi-wave {
+  from { height: 12rpx; }
+  to { height: 48rpx; }
+}
+.vi__hint {
+  font-size: 28rpx;
+  color: #ff7a45;
+}
+.vi__stop-btn {
+  padding: 8rpx 32rpx;
+  background: #ff7a45;
+  color: #fff;
+  border-radius: 100rpx;
+  font-size: 28rpx;
+}
+
+/* 识别结果 */
+.vi__result {
+  padding: 16rpx 20rpx;
+  background: #f0fdf4;
+  border-radius: 16rpx;
+}
+.vi__result--error {
+  background: #fef2f2;
+}
+.vi__result-header {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 28rpx;
+  color: #4a6a4a;
+  font-weight: 600;
+}
+.vi__result--error .vi__result-header {
+  color: #c53030;
+}
+.vi__icon-small {
+  font-size: 32rpx;
+}
+.vi__retry {
+  margin-left: auto;
+  font-size: 26rpx;
+  color: #9a8c7d;
+  font-weight: 400;
+  padding: 4rpx 12rpx;
+  border: 1rpx solid #ddd;
+  border-radius: 8rpx;
+}
+.vi__result-text {
+  margin-top: 10rpx;
+  padding: 12rpx 16rpx;
+  background: #fff;
+  border-radius: 10rpx;
+  font-size: 28rpx;
+  color: #333;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.vi__fill-btn {
+  margin-top: 12rpx;
+  padding: 12rpx;
+  background: #ff7a45;
+  color: #fff;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  text-align: center;
+  font-weight: 600;
+}
+.vi__fill-btn:active {
+  opacity: 0.85;
+}

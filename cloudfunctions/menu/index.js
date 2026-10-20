@@ -121,6 +121,13 @@ async function loadFamilyPreferences(familyId) {
 const MAX_CANDIDATES = 50;
 const MAX_OUTPUT_TOKENS = 1024;
 
+/** 近期菜单回看的自然日天数与读取条数 */
+const RECENT_MENU_DAYS = 7;
+const MAX_RECENT_MENUS = 10;
+
+/** 近期做过的菜保留少量在候选末尾，供用户明确要求时选择 */
+const RECENT_CANDIDATE_LIMIT = 5;
+
 /* ============================== 菜单读写 ============================== */
 
 async function readMenu(menuId) {
@@ -174,7 +181,7 @@ function toRecipeView(recipe) {
   };
 }
 
-function toCandidateSummary(recipe, inventoryNames) {
+function toCandidateSummary(recipe, inventoryNames, recentIds) {
   const names = (recipe.ingredients || []).map((i) => i.name);
   const matched = names.filter((n) => inventoryNames.has(n));
   return {
@@ -186,7 +193,96 @@ function toCandidateSummary(recipe, inventoryNames) {
     ingredients: names,
     matchedIngredients: matched.length,
     missingIngredients: names.filter((n) => !inventoryNames.has(n)),
+    // 近 7 天是否已经做过：仅作为模型判断依据，不落库、不返回前端
+    recentlyUsed: recentIds ? recentIds.has(recipe._id) : false,
   };
+}
+
+/**
+ * 读取该家庭最近 7 天的菜单记录。
+ * 历史菜单只用于避免重复，任何读取问题都降级为空，不阻断换菜 / 重新推荐。
+ */
+async function loadRecentMenus(familyId) {
+  const since = new Date(Date.now() - RECENT_MENU_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const result = await db.collection('menus')
+      .where({ familyId, createdAt: _.gte(since) })
+      .orderBy('createdAt', 'desc')
+      .limit(MAX_RECENT_MENUS)
+      .get();
+    return result.data || [];
+  } catch (e) {
+    if (!isCollectionMissing(e)) {
+      console.warn('[menu] 读取近期菜单失败，已跳过历史去重', e && e.message);
+    }
+    return [];
+  }
+}
+
+function collectRecentIds(recentMenus) {
+  const ids = new Set();
+  (recentMenus || []).forEach((menu) => {
+    (menu.items || []).forEach((item) => {
+      if (item && item.recipeId) ids.add(item.recipeId);
+    });
+  });
+  return ids;
+}
+
+/** 把字符串散列成非负整数，用于让不同请求拿到不同候选顺序 */
+function hashSeed(text) {
+  const source = String(text || '');
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) {
+    hash = (hash * 31 + source.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/** 按 seed 旋转数组：内容不变，只改变顺序 */
+function rotateList(list, seed) {
+  if (!list || list.length <= 1) return list || [];
+  const offset = seed % list.length;
+  if (offset === 0) return list.slice();
+  return list.slice(offset).concat(list.slice(0, offset));
+}
+
+/**
+ * 组装换菜 / 重新推荐的候选：
+ *   - 近 7 天做过的菜排到末尾（保留少量，不能简单屏蔽）；
+ *   - 其余候选按食材匹配度排序后按请求轮转，
+ *     避免模型的位置偏好总是选中排在最前的固定几道菜。
+ */
+function buildCandidates(scored, seed) {
+  const fresh = scored.filter((c) => !c.recentlyUsed).slice(0, MAX_CANDIDATES);
+  const recent = scored.filter((c) => c.recentlyUsed).slice(0, RECENT_CANDIDATE_LIMIT);
+  return rotateList(fresh, seed).concat(recent);
+}
+
+/** 近期菜单摘要：只保留菜名与主要食材，避免提示词过长 */
+function summarizeRecentMenus(recentMenus) {
+  return (recentMenus || [])
+    .map((menu) => {
+      const dishes = (menu.items || [])
+        .map((item) => (item && item.name ? String(item.name).trim() : ''))
+        .filter(Boolean);
+      if (dishes.length === 0) return null;
+
+      const ingredients = [];
+      (menu.items || []).forEach((item) => {
+        (item.ingredients || []).forEach((ing) => {
+          const name = (ing && ing.name ? String(ing.name).trim() : '');
+          if (name && ingredients.indexOf(name) === -1) ingredients.push(name);
+        });
+      });
+
+      return {
+        date: (menu.createdAt || '').slice(0, 10),
+        dishes: dishes.slice(0, 5),
+        mainIngredients: ingredients.slice(0, 8),
+      };
+    })
+    .filter(Boolean);
 }
 
 async function loadRecipes() {
@@ -230,6 +326,7 @@ async function aiPickRecipes(aiConfig, systemInstructions, candidates, count, ex
     ingredients: c.ingredients,
     matchedIngredients: c.matchedIngredients,
     missingIngredients: c.missingIngredients,
+    recentlyUsed: !!c.recentlyUsed,
   }));
 
   const excludeHint = excludeNames && excludeNames.length > 0
@@ -429,17 +526,20 @@ async function handleReplaceMenuItem(event, wxContext) {
     return fail('ITEM_LOCKED', '该菜品已锁定，请先取消锁定后再替换');
   }
 
-  // 3. 读取家庭食材 / 菜谱库 / 家庭偏好：三者互不依赖，并行读取省两次数据库往返
-  const [ingredients, recipes, familyPrefs] = await Promise.all([
+  // 3. 读取家庭食材 / 菜谱库 / 家庭偏好 / 近期菜单：互不依赖，并行读取
+  const [ingredients, recipes, familyPrefs, recentMenus] = await Promise.all([
     loadIngredients(familyId),
     loadRecipes(),
     loadFamilyPreferences(familyId),
+    loadRecentMenus(familyId),
   ]);
 
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
   if (recipes.length === 0) {
     return fail('NO_RECIPES', '菜谱库为空');
   }
+  const recentIds = collectRecentIds(recentMenus);
+  const recentSummary = summarizeRecentMenus(recentMenus);
 
   // E2：按家庭过敏原 / 忌口硬过滤，AI 只能从安全菜谱里选
   const diet = buildDiet(familyPrefs);
@@ -450,27 +550,35 @@ async function handleReplaceMenuItem(event, wxContext) {
 
   // 4. 候选列表：排除当前菜单已有菜品和 target 本身
   const usedIds = new Set((menu.items || []).map((it) => it.recipeId));
-  const candidates = dietFiltered.kept
+  const scored = dietFiltered.kept
     .filter((r) => !usedIds.has(r._id))
-    .map((r) => toCandidateSummary(r, inventoryNames))
+    .map((r) => toCandidateSummary(r, inventoryNames, recentIds))
     .sort((a, b) => {
       const aScore = a.ingredients.length > 0 ? a.matchedIngredients / a.ingredients.length : 0;
       const bScore = b.ingredients.length > 0 ? b.matchedIngredients / b.ingredients.length : 0;
       return bScore - aScore;
-    })
-    .slice(0, MAX_CANDIDATES);
+    });
+  const candidates = buildCandidates(scored, hashSeed(menuId + '|' + Date.now()));
 
   if (candidates.length === 0) {
     return fail('NO_REPLACEMENT', '暂无合适的替换菜品，请取消部分锁定或调整偏好');
   }
 
   // 5. AI 选菜（凭据解析、额度扣减、用量日志均在 runAiCall 内完成）
+  const recentHint = recentSummary.length > 0
+    ? '近期菜单（避免重复）：' + recentSummary.map((m) => m.dishes.join('、')).join('；')
+    : '近期菜单：无';
+
   const systemInstructions = [
     '你是一个饮食推荐助手。请从候选菜谱中选择 1 道菜替换当前菜品。',
+    recentHint,
     '要求：',
-    '1. 优先选择食材匹配度高的（matchedIngredients 多的）；',
-    '2. 考虑荤素搭配，不要选和已锁定菜品同类型的；',
-    preferences ? '3. 遵守偏好：' + preferences : '',
+    '1. 不要默认选择番茄炒蛋、番茄鸡蛋汤、番茄蛋汤等常见菜；番茄和鸡蛋可以正常使用，但不要因为常见就优先选；',
+    '2. 尽量避开近期菜单里出现过的菜；不仅比菜名，主要食材和烹饪方式高度相似的也视为重复；',
+    '3. 候选里 recentlyUsed=true 表示近 7 天已做过，除非用户明确要求，否则不要选；',
+    '4. 在不违反以上多样性的前提下，优先选择食材匹配度高的（matchedIngredients 多的）；',
+    '5. 考虑荤素搭配，不要选和已锁定菜品同类型的；',
+    preferences ? '6. 遵守偏好：' + preferences : '',
     '只输出 JSON，不要输出其他内容。',
   ].filter(Boolean).join('\n');
 
@@ -569,17 +677,20 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     return fail('ALL_LOCKED', '所有菜品均已锁定，无需重新推荐');
   }
 
-  // 2. 读取食材 / 菜谱 / 家庭偏好：三者互不依赖，并行读取省两次数据库往返
-  const [ingredients, recipes, familyPrefs] = await Promise.all([
+  // 2. 读取食材 / 菜谱 / 家庭偏好 / 近期菜单：互不依赖，并行读取
+  const [ingredients, recipes, familyPrefs, recentMenus] = await Promise.all([
     loadIngredients(familyId),
     loadRecipes(),
     loadFamilyPreferences(familyId),
+    loadRecentMenus(familyId),
   ]);
 
   const inventoryNames = new Set(ingredients.map((i) => (i.standardName || i.name || '').trim()).filter(Boolean));
   if (recipes.length === 0) {
     return fail('NO_RECIPES', '菜谱库为空');
   }
+  const recentIds = collectRecentIds(recentMenus);
+  const recentSummary = summarizeRecentMenus(recentMenus);
 
   // E2：按家庭过敏原 / 忌口硬过滤，AI 只能从安全菜谱里选
   const diet = buildDiet(familyPrefs);
@@ -588,30 +699,42 @@ async function handleRegenerateUnlockedItems(event, wxContext) {
     return fail('DIET_BLOCKED', '按家庭过敏原与忌口过滤后没有可重新推荐的菜谱，请调整家庭偏好');
   }
 
-  // 3. 候选列表：排除所有锁定菜品
+  // 3. 候选列表：排除当前菜单的全部菜品（含未锁定项）
+  //    只排除锁定项会让「重新生成」把原来的菜原样返回，这是菜品长期不变的核心原因之一。
   const lockedIds = new Set(lockedItems.map((it) => it.recipeId));
-  const candidates = dietFiltered.kept
-    .filter((r) => !lockedIds.has(r._id))
-    .map((r) => toCandidateSummary(r, inventoryNames))
+  const currentIds = new Set(items.map((it) => it.recipeId));
+  const scored = dietFiltered.kept
+    .filter((r) => !currentIds.has(r._id))
+    .map((r) => toCandidateSummary(r, inventoryNames, recentIds))
     .sort((a, b) => {
       const aScore = a.ingredients.length > 0 ? a.matchedIngredients / a.ingredients.length : 0;
       const bScore = b.ingredients.length > 0 ? b.matchedIngredients / b.ingredients.length : 0;
       return bScore - aScore;
-    })
-    .slice(0, MAX_CANDIDATES);
+    });
+  const candidates = buildCandidates(scored, hashSeed(menuId + '|' + Date.now()));
 
   if (candidates.length < unlockedItems.length) {
     return fail('NO_REPLACEMENT', '候选菜品不足，无法为所有未锁定菜品找到替换');
   }
 
   // 4. AI 选择（凭据解析、额度扣减、用量日志均在 runAiCall 内完成）
+  const recentHint = recentSummary.length > 0
+    ? '近期菜单（避免重复）：' + recentSummary.map((m) => m.dishes.join('、')).join('；')
+    : '近期菜单：无';
+
   const systemInstructions = [
     '你是一个饮食推荐助手。请从候选菜谱中选择 ' + unlockedItems.length + ' 道菜替换当前菜品。',
-    '已锁定菜品：' + lockedItems.map((it) => it.name).join('、'),
+    '已锁定菜品（保留不动）：' + (lockedItems.map((it) => it.name).join('、') || '无'),
+    recentHint,
     '要求：',
-    '1. 优先选择食材匹配度高的；',
-    '2. 尽量荤素搭配，避免与已锁定菜品重复；',
-    preferences ? '3. 遵守偏好：' + preferences : '',
+    '1. 不要默认选择番茄炒蛋、番茄鸡蛋汤、番茄蛋汤等常见菜；番茄和鸡蛋可以正常使用，但不要因为常见就优先选；',
+    '2. 尽量避开近期菜单里出现过的菜；不仅比菜名，主要食材和烹饪方式高度相似的也视为重复；',
+    '3. 一次替换多道菜时，不要全部以鸡蛋或番茄为主要食材，避免食材组合雷同；',
+    '4. 候选里 recentlyUsed=true 表示近 7 天已做过，除非用户明确要求，否则不要选；',
+    '5. 选出的菜品之间不要高度相似：在合理范围内改变蛋白质来源、蔬菜搭配和烹饪方式；',
+    '6. 在不违反以上多样性的前提下，优先选择食材匹配度高的；',
+    '7. 尽量荤素搭配，避免与已锁定菜品重复；',
+    preferences ? '8. 遵守偏好：' + preferences : '',
     '只输出 JSON。',
   ].filter(Boolean).join('\n');
 
@@ -804,6 +927,21 @@ async function handleConfirmMenu(event, wxContext) {
 
 /* ============================== getTodayMenu（Phase 11） ============================== */
 
+/**
+ * 当前北京时间自然日的 UTC 区间。
+ * createdAt 存的是 UTC ISO 字符串，直接按字符串比较需要换算成北京日边界。
+ */
+function getBeijingDayRange(now) {
+  const CN_OFFSET_MS = 8 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const base = (now ? now.getTime() : Date.now()) + CN_OFFSET_MS;
+  const startMs = Math.floor(base / DAY_MS) * DAY_MS - CN_OFFSET_MS;
+  return {
+    start: new Date(startMs).toISOString(),
+    end: new Date(startMs + DAY_MS).toISOString(),
+  };
+}
+
 async function handleGetTodayMenu(event, wxContext) {
   const openid = wxContext.OPENID || '';
   const familyId = event.familyId || '';
@@ -811,10 +949,17 @@ async function handleGetTodayMenu(event, wxContext) {
   const auth = await requireFamilyMember(openid, familyId);
   if (auth.error) return auth.error;
 
+  // 只取「今天创建」的菜单：草稿也要返回，首页据 status 决定按钮
+  const range = getBeijingDayRange();
+
   let docs;
   try {
     const res = await db.collection('menus')
-      .where({ familyId: familyId, status: 'confirmed' })
+      .where({
+        familyId: familyId,
+        status: _.in(['draft', 'confirmed', 'completed']),
+        createdAt: _.gte(range.start).and(_.lt(range.end)),
+      })
       .orderBy('createdAt', 'desc')
       .limit(1)
       .get();
@@ -887,10 +1032,22 @@ async function handleGetMenuHistory(event, wxContext) {
   const items = docs.map((doc) => {
     const menuItems = doc.items || [];
     let totalCalories = 0;
+    let totalProtein = 0;
+    let totalFat = 0;
+    let totalCarbs = 0;
     let dishNutritionStatus = 'complete';
     for (const it of menuItems) {
       if (it.nutrition && typeof it.nutrition.calories === 'number') {
         totalCalories += it.nutrition.calories;
+      }
+      if (it.nutrition && typeof it.nutrition.protein === 'number') {
+        totalProtein += it.nutrition.protein;
+      }
+      if (it.nutrition && typeof it.nutrition.fat === 'number') {
+        totalFat += it.nutrition.fat;
+      }
+      if (it.nutrition && typeof it.nutrition.carbohydrate === 'number') {
+        totalCarbs += it.nutrition.carbohydrate;
       }
       if (it.nutritionStatus === 'partial') {
         dishNutritionStatus = 'partial';
@@ -905,7 +1062,11 @@ async function handleGetMenuHistory(event, wxContext) {
       dateLabel: (doc.createdAt || '').slice(0, 10),
       dishCount: menuItems.length,
       dishNames: menuItems.map((it) => it.name).filter(Boolean),
-      totalCalories: totalCalories > 0 ? totalCalories : 0,
+      // 统计值一律取整：浮点累加会出现 84.30000000000001 这类尾数
+      totalCalories: totalCalories > 0 ? Math.round(totalCalories) : 0,
+      totalProtein: totalProtein > 0 ? Math.round(totalProtein) : 0,
+      totalFat: totalFat > 0 ? Math.round(totalFat) : 0,
+      totalCarbs: totalCarbs > 0 ? Math.round(totalCarbs) : 0,
       nutritionStatus: doc.nutritionStatus || dishNutritionStatus || 'unknown',
       createdAt: doc.createdAt || '',
       updatedAt: doc.updatedAt || '',

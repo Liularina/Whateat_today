@@ -1,0 +1,133 @@
+Phase C 统一 AI 服务 · 验证开始
+
+=== A. 静态结构 ===
+  [通过] openai-compatible-client.js 在 5 个云函数目录中字节一致
+  [通过] ai-service.js 在 5 个云函数目录中字节一致
+  [通过] chat 引入 ai-service
+  [通过] chat 走统一入口 runAiCall
+  [通过] chat 不再直连 user_ai_configs
+  [通过] menu 引入 ai-service
+  [通过] menu 走统一入口 runAiCall
+  [通过] menu 不再直连 user_ai_configs
+  [通过] recipe 引入 ai-service
+  [通过] recipe 走统一入口 runAiCall
+  [通过] recipe 不再直连 user_ai_configs
+  [通过] recommend 引入 ai-service
+  [通过] recommend 走统一入口 runAiCall
+  [通过] recommend 不再直连 user_ai_configs
+  [通过] chat/ai-service.js 存在
+  [通过] menu/ai-service.js 存在
+  [通过] recipe/ai-service.js 存在
+  [通过] recommend/ai-service.js 存在
+  [通过] ai-service 源码不含硬编码密钥
+  [通过] ai-service 通过 process.env 读取凭据
+  [通过] 内置凭据读取集中在 getBuiltinConfig
+  [通过] ai-service 不把 Key 写进日志字段
+  [通过] AI 设置页不直接调用 wx.cloud.callFunction
+
+=== B. 内置通道凭据与状态 ===
+  [通过] 未配置任何环境变量时默认启用（fail open，方便运维）
+  [通过] 未配置任何环境变量时不可用（缺凭据）
+  [通过] 默认每日额度为 20
+  [通过] AI_BUILTIN_ENABLED=false 时不启用
+  [通过] 未启用时不可用
+  [通过] 缺少 AI_BUILTIN_BASE_URL 时不可用
+  [通过] 缺少 AI_BUILTIN_BASE_URL 的原因标记为 missing_credentials
+  [通过] 缺少 AI_BUILTIN_MODEL 时不可用
+  [通过] 缺少 AI_BUILTIN_MODEL 的原因标记为 missing_credentials
+  [通过] 缺少 AI_BUILTIN_API_KEY 时不可用
+  [通过] 缺少 AI_BUILTIN_API_KEY 的原因标记为 missing_credentials
+  [通过] 非 HTTPS 地址不可用
+  [通过] 非 HTTPS 地址原因为 invalid_base_url
+  [通过] 回环地址不可用
+  [通过] 内网地址不可用
+  [通过] 配齐凭据后启用
+  [通过] 配齐凭据后可用
+  [通过] 对外状态不含 API Key
+  [通过] 对外状态不含 Base URL
+  [通过] 对外状态不含模型名
+  [通过] 对外状态字段只有 enabled/ready/dailyQuota
+  [通过] 非法额度回退默认值
+  [通过] 负数额度钳到下限
+  [通过] 超大额度钳到上限
+  [通过] 合法额度原样生效
+
+=== C. 模式路由与统一入口 ===
+  [通过] 默认模式为内置
+  [通过] 合法模式只有两个
+  [通过] 无偏好记录时读默认模式
+  [通过] 保存后读到自定义模式
+  [通过] 再次切换后读到内置模式
+  [通过] 偏好表只有一行（upsert，不是每次新增）
+  [通过] 保存非法模式被拒绝
+  [通过] 偏好集合缺失时降级为默认模式
+  [通过] 内置未就绪时报 AI_BUILTIN_NOT_READY
+  [通过] 内置未就绪时不静默回退到用户自配
+  [通过] 显式 custom 使用用户自配配置
+  [通过] custom 模式不附带内置额度
+  [通过] custom 配置带的是用户自己的模型
+  [通过] 内置模式标记正确
+  [通过] 内置模式使用环境变量里的 Base URL
+  [通过] 内置模式使用环境变量里的模型
+  [通过] 内置明文 Key 正确传递给客户端
+  [通过] 选项里的 apiKey 无法覆盖内置凭据
+  [通过] 选项里的 baseUrl 无法覆盖内置地址
+  [通过] 非法模式被拒绝
+  [通过] custom 未配置时报 AI_CONFIG_REQUIRED
+
+=== D. 每日额度 ===
+  [通过] 前 N 次全部放行
+  [通过] 第 N 次后剩余为 0
+  [通过] 第 N+1 次被拒绝
+  [通过] 被拒绝时剩余为 0
+  [通过] 同一天同用户只有一行计数器
+  [通过] 计数器主键为 userId_日期
+  [通过] 计数器计数正确
+  [通过] 并发 6 次、额度 4 时恰好放行 4 次
+  [通过] 并发后计数器不超过上限
+  [通过] 北京时间当天首次放行
+  [通过] 北京时间当天用满后拒绝
+  [通过] 跨到北京时间次日额度重置
+  [通过] 跨日后计数器分成两行
+  [通过] custom 模式不写额度计数器
+  [通过] 额度用尽后报 AI_QUOTA_EXCEEDED
+  [通过] 显式指定内置模式也无法绕过额度
+
+=== E. 用量日志与脱敏 ===
+{"event":"ai_call","userId":"user_l","action":"recommendMenus","requestId":"req-1","mode":"builtin","quotaUsed":1,"quotaRemaining":19,"status":"success","duration":0}
+  [通过] runAiCall 透传回调返回值
+  [通过] 成功调用写入一条 ai_logs
+  [通过] 日志状态为 success
+  [通过] 日志记录模式
+  [通过] 日志记录功能名
+  [通过] 日志记录 requestId
+  [通过] 日志记录用户
+  [通过] 日志记录耗时
+  [通过] 日志记录额度剩余
+{"event":"ai_call","userId":"user_l","action":"replaceMenuItem","requestId":"req-2","mode":"builtin","quotaUsed":2,"quotaRemaining":18,"status":"fail","code":"AI_AUTH_FAILED","error":"模型认证失败","duration":0}
+  [通过] runAiCall 向上抛出回调错误
+  [通过] 失败调用同样写入 ai_logs
+  [通过] 失败日志状态为 fail
+  [通过] 失败日志记录错误码
+  [通过] ai_logs 不含明文 Key
+  [通过] ai_logs 不含环境变量名
+  [通过] apiKey 被打码
+  [通过] Authorization 被打码
+  [通过] 非敏感字段保留
+{"event":"ai_call","userId":"user_l2","action":"x","requestId":"","mode":"builtin","quotaUsed":1,"quotaRemaining":19,"status":"success","duration":0}
+[ai-service] 写入 ai_logs 失败（不影响 AI 调用）：collection ai_logs not exists；请确认该集合已创建
+  [通过] ai_logs 缺失时调用仍成功
+
+=== F. 错误码与前端文案 ===
+  [通过] AI_BUILTIN_NOT_READY 有可操作的中文文案
+  [通过] AI_QUOTA_EXCEEDED 有可操作的中文文案
+  [通过] AI_CONFIG_REQUIRED 有可操作的中文文案
+  [通过] AI_MODE_INVALID 有可操作的中文文案
+  [通过] 内置未就绪文案不引导用户自配 API
+  [通过] 额度用尽文案说明可次日再试
+  [通过] 未知错误码不返回文案（避免误映射）
+  [通过] 空错误码返回空串
+
+========================================
+通过 112 项，失败 0 项
+全部通过

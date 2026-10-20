@@ -143,10 +143,27 @@ export function normalizeError(error: unknown, taskName = ''): AppError {
     return new AppError('TIMEOUT', '请求超时，请检查网络后重试');
   }
 
-  if (/cloud\.?callFunction|cloud function|FunctionName|not found|-501000|-504002|function has no/i.test(rawMessage)) {
+  // 函数不存在（未部署）：-501000
+  if (/FunctionName parameter could not be found|-501000|FUNCTION_NOT_FOUND|FunctionName.*not found/i.test(rawMessage)) {
     return new AppError(
       'CLOUD_FUNCTION_UNAVAILABLE',
-      `云函数${taskName ? ` ${taskName} ` : ''}暂时不可用，请确认已部署并已构建 npm`,
+      `云函数${taskName ? ` ${taskName} ` : ''}不存在，请先在开发者工具中上传部署`,
+    );
+  }
+
+  // 函数存在但执行失败（抛错/依赖缺失/超时）：-504002 / -504003
+  // 注意：这类错误最容易被误判成「未部署」，实际应查看云函数日志
+  if (/-504002|-504003|functions execute fail|function execution|function has no|FunctionName parameter error/i.test(rawMessage)) {
+    return new AppError(
+      'CLOUD_FUNCTION_ERROR',
+      `云函数${taskName ? ` ${taskName} ` : ''}执行失败，请查看云函数日志`,
+    );
+  }
+
+  if (/cloud\.?callFunction|cloud function/i.test(rawMessage)) {
+    return new AppError(
+      'CLOUD_FUNCTION_UNAVAILABLE',
+      `云函数${taskName ? ` ${taskName} ` : ''}暂时不可用，请稍后重试`,
     );
   }
 

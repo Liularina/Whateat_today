@@ -42,7 +42,7 @@
 
     <empty-state
       wx:elif="{{!todayMenu}}"
-      emoji="📅"
+      icon="plate"
       title="还没有已确认的菜单"
       description="去首页发起推荐，确认后就会出现在这里"
       actionText="去首页看看"
@@ -189,9 +189,33 @@
 
       <empty-state
         wx:if="{{calendarDays.length === 0}}"
-        emoji="📅"
+        emoji="🗓️"
         title="本月暂无菜单"
       />
+
+      <!-- 月统计 -->
+      <view class="cal-stats" wx:if="{{monthStats && calendarMode === 'month'}}">
+        <view class="cal-stats__title">本月统计（{{monthStats.daysWithMenu}} 天有菜单）</view>
+        <view class="cal-stats__row">
+          <view class="cal-stats__item">
+            <view class="cal-stats__num">{{monthStats.totalCalories}}</view>
+            <view class="cal-stats__label">总热量 kcal</view>
+          </view>
+          <view class="cal-stats__item">
+            <view class="cal-stats__num">{{monthStats.avgCalories}}</view>
+            <view class="cal-stats__label">日均 kcal</view>
+          </view>
+          <view class="cal-stats__item" wx:if="{{monthStats.totalProtein > 0}}">
+            <view class="cal-stats__num">{{monthStats.totalProtein}} g</view>
+            <view class="cal-stats__label">蛋白质</view>
+          </view>
+          <view class="cal-stats__item" wx:if="{{monthStats.totalFat > 0}}">
+            <view class="cal-stats__num">{{monthStats.totalFat}} g</view>
+            <view class="cal-stats__label">脂肪</view>
+          </view>
+        </view>
+        <view class="cal-stats__warn" wx:if="{{monthStats.isPartial}}">部分菜单营养数据不完整</view>
+      </view>
     </block>
 
     <!-- ===== 周视图 ===== -->
@@ -215,11 +239,47 @@
           </view>
         </view>
       </view>
+
+      <!-- 周统计 -->
+      <view class="cal-stats" wx:if="{{weekStats}}">
+        <view class="cal-stats__title">本周统计（{{weekStats.daysWithMenu}} 天有菜单）</view>
+        <view class="cal-stats__row">
+          <view class="cal-stats__item">
+            <view class="cal-stats__num">{{weekStats.totalCalories}}</view>
+            <view class="cal-stats__label">总热量 kcal</view>
+          </view>
+          <view class="cal-stats__item">
+            <view class="cal-stats__num">{{weekStats.avgCalories}}</view>
+            <view class="cal-stats__label">日均 kcal</view>
+          </view>
+          <view class="cal-stats__item" wx:if="{{weekStats.totalProtein > 0}}">
+            <view class="cal-stats__num">{{weekStats.totalProtein}} g</view>
+            <view class="cal-stats__label">蛋白质</view>
+          </view>
+          <view class="cal-stats__item" wx:if="{{weekStats.totalFat > 0}}">
+            <view class="cal-stats__num">{{weekStats.totalFat}} g</view>
+            <view class="cal-stats__label">脂肪</view>
+          </view>
+        </view>
+        <view class="cal-stats__warn" wx:if="{{weekStats.isPartial}}">部分菜单营养数据不完整</view>
+      </view>
     </block>
 
     <!-- ===== 日视图弹层 ===== -->
     <view class="cal-day-mask" wx:if="{{selectedDate}}" bindtap="onCloseDay">
       <view class="cal-day-panel" catchtap="">
+
+        <!-- 日统计 -->
+        <view class="cal-day-stats" wx:if="{{selectedDayStats}}">
+          <view class="cal-day-stats__total">{{selectedDayStats.totalCalories}} kcal</view>
+          <view class="cal-day-stats__row">
+            <text class="cal-day-stats__macro" wx:if="{{selectedDayStats.totalProtein > 0}}">蛋白质 {{selectedDayStats.totalProtein}}g</text>
+            <text class="cal-day-stats__macro" wx:if="{{selectedDayStats.totalFat > 0}}">脂肪 {{selectedDayStats.totalFat}}g</text>
+            <text class="cal-day-stats__macro" wx:if="{{selectedDayStats.totalCarbs > 0}}">碳水 {{selectedDayStats.totalCarbs}}g</text>
+          </view>
+          <text class="cal-day-stats__warn" wx:if="{{selectedDayStats.isPartial}}">部分数据缺失</text>
+        </view>
+
         <view class="cal-day-panel__header">
           <view class="cal-day-panel__date">{{selectedDateLabel}}</view>
           <view class="cal-day-panel__close" bindtap="onCloseDay">✕</view>
@@ -227,7 +287,7 @@
 
         <empty-state
           wx:if="{{selectedDayMenus.length === 0}}"
-          emoji="🍽️"
+          icon="plate"
           title="当天没有菜单"
           description="试试其他日期"
         />

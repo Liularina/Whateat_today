@@ -1,92 +1,177 @@
 <view class="page">
-  <view class="page-header">
-    <view class="page-header__title">今天吃什么？</view>
-
-    <!-- 正在登录：不展示失败态，避免启动瞬间闪一下错误 -->
-    <view class="page-header__subtitle" wx:if="{{!authReady}}">正在登录…</view>
-
-    <!-- 登录失败 / 网络异常：给出可重试的明确提示，不白屏 -->
-    <block wx:elif="{{!isLoggedIn}}">
-      <view class="page-header__subtitle">{{authError || '登录失败，请稍后重试'}}</view>
-      <view class="login-retry" bindtap="onRetryLogin" hover-class="login-retry--hover">重新登录</view>
-    </block>
-
-    <!-- 已登录 -->
-    <block wx:else>
-      <view class="page-header__subtitle">{{greeting}}</view>
-      <view class="login-warning" wx:if="{{authError}}">{{authError}}</view>
-    </block>
+  <!-- ===== 自定义导航栏：最顶上加粗大标题 ===== -->
+  <view class="nav" style="padding-top: {{statusBarHeight}}px">
+    <view class="nav__title">今天吃什么</view>
   </view>
 
-  <!-- 家庭状态：无家庭不强制跳转，用户可以先浏览其它内容 -->
-  <block wx:if="{{isLoggedIn}}">
-    <!-- 家庭信息确认前不展示任何家庭引导，避免闪一下 -->
-    <block wx:if="{{familyReady}}">
-      <view
-        class="family-card"
-        wx:if="{{isInFamily}}"
-        bindtap="onGoFamily"
-        hover-class="family-card--hover"
-      >
-        <view class="family-card__emoji">🏠</view>
-        <view class="family-card__body">
-          <view class="family-card__name">{{familyName}}</view>
-          <view class="family-card__meta">{{memberCount}} 位成员</view>
+  <!-- ===== 家庭管理入口 ===== -->
+  <view
+    class="topbar"
+    wx:if="{{isLoggedIn && familyReady && isInFamily}}"
+    bindtap="onGoFamily"
+    hover-class="topbar--hover"
+  >
+    <view class="topbar__title">家庭管理</view>
+    <view class="topbar__family">
+      <text>{{familyName}}</text>
+      <text class="topbar__arrow">›</text>
+    </view>
+  </view>
+
+  <!-- ===== 登录/家庭异常 ===== -->
+  <view class="banner banner--hint" wx:if="{{!authReady}}">正在登录…</view>
+  <view class="banner banner--error" wx:elif="{{!isLoggedIn}}">
+    <text>{{authError || '登录失败，请稍后重试'}}</text>
+    <text class="banner__retry" bindtap="onRetryLogin">重试</text>
+  </view>
+  <view class="banner banner--error" wx:elif="{{familyError}}">{{familyError}}</view>
+
+  <!-- ===== 无家庭引导 ===== -->
+  <view class="guide" wx:if="{{isLoggedIn && familyReady && !isInFamily}}">
+    <view class="guide__title">你还没有家庭</view>
+    <view class="guide__desc">创建或加入一个家庭，和家人一起决定今晚吃什么。</view>
+    <view class="guide__actions">
+      <view class="wte-btn wte-btn--primary" bindtap="onGoCreateFamily">创建家庭</view>
+      <view class="wte-btn wte-btn--ghost" bindtap="onGoJoinFamily">加入家庭</view>
+    </view>
+  </view>
+
+  <!-- ===== 主内容（有家庭） ===== -->
+  <block wx:if="{{isLoggedIn && isInFamily && familyReady}}">
+
+    <!-- A. 当前菜单 —— 首页核心卡片 -->
+    <view class="menu-block">
+      <view class="menu-block__head">
+        <view class="menu-block__title">
+          <text>当前菜单</text>
+          <text class="menu-block__meal" wx:if="{{todayMenu}}">{{menuMealLabel}}</text>
         </view>
-        <view class="family-card__arrow">›</view>
+        <text class="menu-block__status" wx:if="{{todayMenu}}">{{menuStatusLabel}}</text>
       </view>
 
-      <view class="family-guide" wx:else>
-        <view class="family-guide__title">你还没有家庭</view>
-        <view class="family-guide__desc">创建一个家庭，和家人一起决定今晚吃什么。</view>
-        <view class="family-guide__actions">
-          <view class="wte-btn wte-btn--primary" bindtap="onGoCreateFamily">创建家庭</view>
-          <view class="wte-btn wte-btn--ghost" bindtap="onGoJoinFamily">加入家庭</view>
+      <!-- 加载 -->
+      <view class="loading" wx:if="{{menuState === 'loading'}}">
+        <view class="loading__spinner"></view>
+        <text>加载中…</text>
+      </view>
+
+      <!-- 有菜单 -->
+      <view class="menu-card" wx:elif="{{menuState === 'loaded' && todayMenu}}">
+        <view class="mc-summary" wx:if="{{menuTotalKcal > 0 || menuServings > 0}}">
+          <text class="mc-summary__kcal" wx:if="{{menuTotalKcal > 0}}">约 {{menuTotalKcal}} kcal</text>
+          <text class="mc-summary__pp" wx:if="{{menuServings > 0 && menuTotalKcal > 0}}">· {{menuServings}} 人份</text>
+          <text class="mc-summary__partial" wx:if="{{menuNutritionStatus === 'partial'}}">（部分估算）</text>
+        </view>
+
+        <!-- 逐道菜：点击进入菜谱详情 -->
+        <view class="mc-dishes">
+          <view
+            class="mc-dish"
+            wx:for="{{dishes}}"
+            wx:key="recipeId"
+            data-id="{{item.recipeId}}"
+            data-name="{{item.name}}"
+            bindtap="onOpenDish"
+            hover-class="mc-dish--hover"
+          >
+            <view class="mc-dish__left">
+              <view class="mc-dish__name">{{item.name}}</view>
+              <view class="mc-dish__meta">
+                <text wx:if="{{item.kcalLabel}}">{{item.kcalLabel}}</text>
+                <text class="mc-dish__sep" wx:if="{{item.kcalLabel && item.cookTimeLabel}}">·</text>
+                <text wx:if="{{item.cookTimeLabel}}">{{item.cookTimeLabel}}</text>
+                <text wx:if="{{!item.kcalLabel && !item.cookTimeLabel}}">暂无营养数据</text>
+              </view>
+            </view>
+            <text class="mc-dish__arrow">›</text>
+          </view>
+        </view>
+
+        <!-- 操作按钮 -->
+        <view class="mc-actions">
+          <!-- 换一道菜：只有未确认（draft）可用 -->
+          <view
+            class="mc-btn {{menuStatusCode === 'draft' ? 'mc-btn--primary' : 'mc-btn--disabled'}} {{swapping ? 'mc-btn--busy' : ''}}"
+            bindtap="onSwapDish"
+          >{{swapping ? '换菜中…' : '换一道菜'}}</view>
+
+          <!-- 查看做法：逻辑与原「查看做法」保持一致，仅改名称 -->
+          <view
+            class="mc-btn {{menuStatusCode === 'draft' ? 'mc-btn--ghost' : 'mc-btn--primary'}}"
+            bindtap="onViewRecipes"
+          >{{menuStatusCode === 'draft' ? '锁定并查看做法' : '查看做法'}}</view>
         </view>
       </view>
 
-      <view class="login-warning" wx:if="{{familyError}}">{{familyError}}</view>
-    </block>
+      <!-- 无菜单 -->
+      <view class="menu-card menu-card--empty" wx:elif="{{menuState === 'loaded' && !todayMenu}}">
+        <view class="menu-card__plate"></view>
+        <view class="menu-card__text">今天还没有决定吃什么</view>
+        <view class="mc-actions mc-actions--empty">
+          <view class="mc-btn mc-btn--primary mc-btn--wide" bindtap="onStartRecommend">AI 推荐菜单</view>
+        </view>
+      </view>
+
+      <!-- 错误 -->
+      <view class="menu-card menu-card--err" wx:elif="{{menuState === 'error'}}">
+        <text>菜单加载失败</text>
+        <text class="banner__retry" bindtap="onReloadMenu">重试</text>
+      </view>
+    </view>
+
+    <!-- B. 冰箱提醒 -->
+    <view class="fridge" wx:if="{{fridge}}" bindtap="onGoIngredients">
+      <view class="fridge__head">
+        <text class="fridge__title">冰箱提醒</text>
+        <text class="fridge__badge" wx:if="{{fridge.warning > 0}}">{{fridge.warning}} 项需关注</text>
+        <text class="fridge__badge fridge__badge--ok" wx:else>{{fridge.total}} 项正常</text>
+      </view>
+
+      <block wx:if="{{fridge.warning > 0}}">
+        <view class="fridge__alerts">
+          <view class="fridge__alert" wx:for="{{fridge.alerts}}" wx:key="name">
+            <text class="fridge__alert-name">{{item.name}}</text>
+            <text class="fridge__alert-label fridge__alert-label--warn">{{item.label}}</text>
+          </view>
+        </view>
+      </block>
+      <view class="fridge__normal" wx:else>
+        <text>所有食材状态正常</text>
+      </view>
+
+      <view class="fridge__goto">
+        <text>查看全部食材</text>
+        <text class="fridge__arrow">›</text>
+      </view>
+    </view>
+
+    <!-- C. 快捷操作（3个） -->
+    <view class="quick">
+      <text class="quick__title">快捷操作</text>
+      <view class="quick__row">
+        <view class="q-item" bindtap="onStartRecommend" hover-class="q-item--hover">
+          <view class="q-item__icon">🍳</view>
+          <view class="q-item__label">AI 推荐</view>
+        </view>
+        <view class="q-item" bindtap="onGoShopping" hover-class="q-item--hover">
+          <view class="q-item__icon">🛒</view>
+          <view class="q-item__label">采购清单</view>
+        </view>
+        <view class="q-item" bindtap="onGoHistory" hover-class="q-item--hover">
+          <view class="q-item__icon q-item__icon--history"></view>
+          <view class="q-item__label">历史菜单</view>
+        </view>
+      </view>
+    </view>
   </block>
 
-  <!-- 第二视觉层级：根据冰箱食材推荐 -->
-  <view class="hero" bindtap="onStartRecommend" hover-class="hero--hover">
-    <view class="hero__emoji">🍳</view>
-    <view class="hero__text">
-      <view class="hero__title">根据冰箱食材推荐</view>
-      <view class="hero__desc">按人数、口味、忌口安排 3 套菜单</view>
-    </view>
-    <view class="hero__arrow">›</view>
-  </view>
-
-  <!-- 第三视觉层级：次入口 -->
-  <view class="quick-actions">
-    <view class="quick-actions__item" bindtap="onGoIngredients" hover-class="quick-actions__item--hover">
-      <view class="quick-actions__emoji">🧺</view>
-      <view class="quick-actions__label">添加食材</view>
-    </view>
-    <view class="quick-actions__item" bindtap="onGoOrder" hover-class="quick-actions__item--hover">
-      <view class="quick-actions__emoji">📣</view>
-      <view class="quick-actions__label">家庭点菜</view>
-    </view>
-    <view class="quick-actions__item" bindtap="onGoRecipes" hover-class="quick-actions__item--hover">
-      <view class="quick-actions__emoji">📖</view>
-      <view class="quick-actions__label">家常菜谱</view>
-    </view>
-    <view class="quick-actions__item" bindtap="onGoFamily" hover-class="quick-actions__item--hover">
-      <view class="quick-actions__emoji">👨‍👩‍👧</view>
-      <view class="quick-actions__label">我的家庭</view>
-    </view>
-  </view>
-
-  <view class="section">
-    <view class="section__title">今日菜单</view>
-    <empty-state
-      emoji="🍽️"
-      title="今天还没有决定吃什么"
-      description="点上面的按钮，让 AI 帮全家安排好今晚"
-      actionText="开始推荐"
-      bind:action="onStartRecommend"
-    />
+  <!-- ===== 机器人悬浮入口 ===== -->
+  <view
+    class="robot-fab"
+    wx:if="{{isLoggedIn && isInFamily}}"
+    bindtap="onOpenChat"
+    hover-class="robot-fab--hover"
+  >
+    <view class="robot-fab__icon"></view>
   </view>
 </view>

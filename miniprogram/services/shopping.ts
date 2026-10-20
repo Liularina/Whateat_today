@@ -12,11 +12,11 @@ import { callFunction } from '../utils/cloud';
 
 export const shoppingService = {
   /** 按已确认菜单 + 当前库存生成（或刷新）采购清单 */
-  generate(familyId: string, menuId: string): Promise<ShoppingList> {
-    return callFunction<ShoppingList, { familyId: string; menuId: string }>(
+  generate(familyId: string, menuId: string, options?: { resetChecked?: boolean }): Promise<ShoppingList> {
+    return callFunction<ShoppingList, { familyId: string; menuId: string; resetChecked?: boolean }>(
       'shopping',
       'generateShoppingList',
-      { familyId, menuId },
+      { familyId, menuId, resetChecked: options && options.resetChecked === true },
     );
   },
 

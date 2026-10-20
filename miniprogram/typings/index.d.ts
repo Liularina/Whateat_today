@@ -26,6 +26,8 @@ declare global {
     currentMenuId: string;
     /** Phase G：首次登录资料设置是否已完成（昵称/头像已非默认值） */
     profileSetupDone: boolean;
+    /** 首页「历史菜单」跳转菜单 tab 页时，指定落地 tab（消费后清空） */
+    pendingMenuTab: '' | 'today' | 'history' | 'calendar';
   }
 
   interface IAppOption {

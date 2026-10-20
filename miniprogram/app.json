@@ -20,7 +20,8 @@
     "pages/family/join",
     "pages/family/settings",
     "pages/shopping/index",
-    "pages/mine/index"
+    "pages/mine/index",
+    "pages/chat/index"
   ],
   "window": {
     "backgroundTextStyle": "dark",
@@ -70,5 +71,11 @@
   "style": "v2",
   "sitemapLocation": "sitemap.json",
   "lazyCodeLoading": "requiredComponents",
+  "plugins": {
+    "WechatSI": {
+      "version": "0.3.6",
+      "provider": "wx069ba97219f66d99"
+    }
+  },
   "usingComponents": {}
 }

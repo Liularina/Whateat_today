@@ -187,9 +187,12 @@ async function handleGenerateShoppingList(event, wxContext) {
   const ingredients = await loadIngredients(familyId);
   const items = buildShoppingItems(menu, ingredients);
 
-  // 刷新时保留已有勾选（按 key 匹配），避免家人重新生成后勾选被清空
+  // 刷新时保留已有勾选（按 key 匹配），避免家人重新生成后勾选被清空；
+  // resetChecked=true 用于「采购完毕」入库后收口，把勾选状态一并清零
   const existing = await findList(familyId, menuId);
-  const checked = existing ? extractChecked(existing.items) : {};
+  const checked = existing && event.resetChecked !== true
+    ? extractChecked(existing.items)
+    : {};
   const mergedItems = applyChecked(items, checked);
 
   const now = new Date().toISOString();

@@ -1,170 +1,549 @@
-.hero {
+/* ===== 页面 ===== */
+/* 纵向撑满一屏：今日菜单占据剩余空间，冰箱提醒与快捷操作固定在下方 */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  box-sizing: border-box;
+  /* 自定义导航栏自己处理状态栏安全区，这里不再留顶部内边距 */
+  padding-top: 0;
+  /* 给右下角机器人悬浮入口留出安全区，避免压住快捷操作 */
+  padding-bottom: 180rpx;
+}
+
+/* ===== 自定义导航栏 ===== */
+/* 顶层大标题：最顶上居中、加粗放大（原生导航栏已关闭） */
+.nav {
   display: flex;
   align-items: center;
-  margin-top: 40rpx;
-  padding: 40rpx 32rpx;
-  border-radius: 28rpx;
-  background: linear-gradient(135deg, #ff9a6b, #ff7a45);
-  box-shadow: 0 16rpx 36rpx rgba(255, 122, 69, 0.28);
+  justify-content: center;
+  height: 88rpx;
 }
 
-.hero--hover {
-  opacity: 0.9;
-}
-
-.hero__emoji {
-  font-size: 64rpx;
-  margin-right: 24rpx;
-}
-
-.hero__text {
-  flex: 1;
-}
-
-.hero__title {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.hero__desc {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.hero__arrow {
-  font-size: 48rpx;
-  color: rgba(255, 255, 255, 0.9);
+.nav__title {
+  font-size: 50rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
   line-height: 1;
-}
-
-.quick-actions {
-  display: flex;
-  margin-top: 28rpx;
-  gap: 20rpx;
-}
-
-.quick-actions__item {
-  flex: 1;
-  padding: 28rpx 0;
-  border-radius: 24rpx;
-  background: #ffffff;
-  text-align: center;
-  box-shadow: 0 8rpx 24rpx rgba(180, 140, 105, 0.08);
-}
-
-.quick-actions__item--hover {
-  background: #fff7f1;
-}
-
-.quick-actions__emoji {
-  font-size: 44rpx;
-}
-
-.quick-actions__label {
-  margin-top: 10rpx;
-  font-size: 26rpx;
   color: var(--wte-text);
 }
 
-/* 登录失败时的重试入口 */
-.login-retry {
-  display: inline-block;
-  margin-top: 20rpx;
-  padding: 14rpx 44rpx;
-  border-radius: 999rpx;
+/* ===== 家庭管理入口 ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
+  padding: 10rpx 0 2rpx;
+}
+
+.topbar--hover {
+  opacity: .7;
+}
+
+.topbar__title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.topbar__family {
+  display: flex;
+  align-items: center;
   font-size: 26rpx;
-  color: #ffffff;
-  background: #ff7a45;
+  color: #b88a6a;
 }
 
-.login-retry--hover {
-  opacity: 0.85;
+.topbar__arrow {
+  margin-left: 2rpx;
+  font-size: 28rpx;
 }
 
-/* 已登录但服务端校验失败（例如网络异常）时的提示 */
-.login-warning {
-  margin-top: 10rpx;
-  font-size: 24rpx;
+/* ===== 提示条 ===== */
+.banner {
+  padding: 12rpx 0;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.banner--error {
   color: #d97706;
 }
 
-/* ---------- 家庭卡片（已加入家庭） ---------- */
-.family-card {
+.banner__retry {
+  margin-left: 14rpx;
+  color: #ff7a45;
+  font-weight: 600;
+}
+
+/* ===== 无家庭引导 ===== */
+.guide {
+  margin-top: 20rpx;
+  padding: 32rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  box-shadow: 0 6rpx 24rpx rgba(180,140,105,.06);
+}
+
+.guide__title {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.guide__desc {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.guide__actions {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.guide__actions .wte-btn { flex: 1; }
+.guide__actions .wte-btn + .wte-btn { margin-left: 16rpx; }
+
+/* ===== 今日菜单 ===== */
+
+.menu-block {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 24rpx;
+}
+
+.menu-block__head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  margin-top: 32rpx;
-  padding: 32rpx;
-  border-radius: 24rpx;
-  background: #ffffff;
-  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+  justify-content: space-between;
+  margin-bottom: 12rpx;
 }
 
-.family-card--hover {
-  background: #fff7f1;
+.menu-block__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--wte-text);
 }
 
-.family-card__emoji {
-  font-size: 52rpx;
-  margin-right: 24rpx;
+.menu-block__meal {
+  margin-left: 10rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  color: #ff7a45;
+  background: #fff3ed;
 }
 
-.family-card__body {
+.menu-block__status {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+/* 加载 */
+.loading {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 52rpx 0;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+.loading__spinner {
+  width: 30rpx;
+  height: 30rpx;
+  margin-right: 12rpx;
+  border: 3rpx solid #f0e4da;
+  border-top-color: #ff7a45;
+  border-radius: 50%;
+  animation: ms 0.6s linear infinite;
+}
+
+@keyframes ms { to { transform: rotate(360deg); } }
+
+/* 菜单卡片：撑满今日菜单剩余空间，菜品区随高度伸展，按钮始终贴底 */
+.menu-card {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 260rpx;
+  padding: 24rpx 24rpx 12rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  box-shadow: 0 4rpx 20rpx rgba(180,140,105,.08);
+}
+
+.mc-summary {
+  flex: 0 0 auto;
+  margin-bottom: 14rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.mc-summary__partial {
+  color: #d97706;
+  font-size: 22rpx;
+}
+
+/* 菜品列表 */
+.mc-dishes {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mc-dish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0;
+}
+
+.mc-dish + .mc-dish {
+  border-top: 1rpx solid #f5ede4;
+}
+
+.mc-dish--hover {
+  background: #fef6f0;
+}
+
+.mc-dish__left {
   flex: 1;
   min-width: 0;
 }
 
-.family-card__name {
-  font-size: 34rpx;
-  font-weight: 700;
+.mc-dish__name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.family-card__meta {
-  margin-top: 6rpx;
-  font-size: 26rpx;
+.mc-dish__meta {
+  margin-top: 4rpx;
+  font-size: 24rpx;
   color: var(--wte-text-weak);
 }
 
-.family-card__arrow {
-  font-size: 44rpx;
-  color: #c8b8a8;
-  line-height: 1;
+.mc-dish__sep {
+  margin: 0 6rpx;
 }
 
-/* ---------- 无家庭引导（不强制跳转） ---------- */
-.family-guide {
-  margin-top: 32rpx;
-  padding: 36rpx 32rpx;
-  border-radius: 24rpx;
-  background: #ffffff;
-  box-shadow: 0 8rpx 32rpx rgba(180, 140, 105, 0.08);
+.mc-dish__arrow {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  font-size: 32rpx;
+  color: #cbb5a3;
 }
 
-.family-guide__title {
-  font-size: 34rpx;
-  font-weight: 700;
-}
-
-.family-guide__desc {
-  margin-top: 12rpx;
-  font-size: 26rpx;
-  color: var(--wte-text-weak);
-}
-
-.family-guide__actions {
+/* 操作按钮区 */
+.mc-actions {
+  flex: 0 0 auto;
   display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #f5ede4;
+}
+
+.mc-actions--empty {
+  border-top: none;
+  justify-content: center;
+}
+
+.mc-actions--empty .mc-btn {
+  flex: 0 0 auto;
+}
+
+/* 宽按钮：覆盖基础 .mc-btn 的内边距，左右留足空间，文字不会顶到圆角 */
+.mc-actions .mc-btn--wide {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 440rpx;
+  padding: 24rpx 64rpx;
+  font-size: 30rpx;
+  white-space: nowrap;
+}
+
+.mc-btn {
+  flex: 1;
+  text-align: center;
+  padding: 18rpx 0;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.mc-btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, #ff9a6b, #ff7a45);
+}
+
+.mc-btn--ghost {
+  color: #ff7a45;
+  background: #fff3ed;
+}
+
+/* 已确认后不可再换菜：保持可读但不鼓励点击 */
+.mc-btn--disabled {
+  color: #b9aaa0;
+  background: #f4efea;
+}
+
+.mc-btn--busy {
+  opacity: .6;
+}
+
+/* 无菜单空态：整块区域垂直居中，不因缺少内容而塌陷 */
+.menu-card--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40rpx 24rpx;
+  background: linear-gradient(135deg, #fff7f1, #ffece0);
+}
+
+/* 空态餐盘：放大 + 轻微浮动，比 emoji 更生动 */
+.menu-card__plate {
+  width: 176rpx;
+  height: 176rpx;
+  margin-bottom: 8rpx;
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiI+PGVsbGlwc2UgY3g9IjQ4IiBjeT0iODUiIHJ4PSIyOSIgcnk9IjUiIGZpbGw9IiNmMGUwZDMiIG9wYWNpdHk9IjAuOSIvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iNDUiIHI9IjQwIiBmaWxsPSIjZjVlNmRhIi8+PGNpcmNsZSBjeD0iNDgiIGN5PSI0MyIgcj0iNDAiIGZpbGw9IiNmZmZmZmYiLz48Y2lyY2xlIGN4PSI0OCIgY3k9IjQzIiByPSIzMSIgZmlsbD0iI2ZmZmFmNSIgc3Ryb2tlPSIjZmZlMmNlIiBzdHJva2Utd2lkdGg9IjMiLz48cGF0aCBkPSJNMjMgNDljMC0xMSAxMS0xNyAyNS0xN3MyNSA2IDI1IDE3YzAgNy0xMSAxMS0yNSAxMXMtMjUtNC0yNS0xMXoiIGZpbGw9IiNmZmY1ZTIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9IjQxIiByPSI3IiBmaWxsPSIjZmY4YTVjIi8+PGNpcmNsZSBjeD0iNTEiIGN5PSIzNyIgcj0iNiIgZmlsbD0iI2ZmYzk0ZCIvPjxjaXJjbGUgY3g9IjU3IiBjeT0iNDgiIHI9IjciIGZpbGw9IiNmZjhhNWMiLz48Y2lyY2xlIGN4PSI0NCIgY3k9IjUxIiByPSI2IiBmaWxsPSIjZmZjOTRkIi8+PHBhdGggZD0iTTI4IDUzYzItNiA4LTkgMTItNy0xIDYtNiAxMC0xMiA3eiIgZmlsbD0iIzdmYzk2YSIvPjxwYXRoIGQ9Ik02OCA1M2MtMi02LTgtOS0xMi03IDEgNiA2IDEwIDEyIDd6IiBmaWxsPSIjNWJiNDU0Ii8+PGNpcmNsZSBjeD0iNDgiIGN5PSIzMSIgcj0iMy40IiBmaWxsPSIjZmZlMDhhIi8+PC9zdmc+");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  animation: plate-float 3.4s ease-in-out infinite;
+}
+
+@keyframes plate-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8rpx); }
+}
+
+.menu-card__text {
+  font-size: 28rpx;
+  color: var(--wte-text);
+}
+
+.menu-card--err {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40rpx 0;
+  font-size: 26rpx;
+  color: var(--wte-text-weak);
+}
+
+/* ===== 冰箱提醒 ===== */
+
+.fridge {
+  flex: 0 0 auto;
+  margin-top: 24rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  box-shadow: 0 4rpx 16rpx rgba(180,140,105,.06);
+}
+
+.fridge__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fridge__title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.fridge__badge {
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  color: #d97706;
+  background: #fef3c7;
+}
+
+.fridge__badge--ok {
+  color: #059669;
+  background: #d1fae5;
+}
+
+/* 预警食材 */
+.fridge__alerts {
+  margin-top: 10rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+}
+
+.fridge__alert {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  background: #fef9f5;
+}
+
+.fridge__alert-name {
+  color: var(--wte-text);
+  max-width: 160rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fridge__alert-label--warn {
+  color: #d97706;
+}
+
+/* 正常态 */
+.fridge__normal {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #8a7a6a;
+}
+
+/* 底部链接 */
+.fridge__goto {
+  margin-top: 14rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #f5ede4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #b88a6a;
+}
+
+.fridge__arrow {
+  font-size: 28rpx;
+}
+
+/* ===== 快捷操作 ===== */
+
+.quick {
+  flex: 0 0 auto;
   margin-top: 28rpx;
 }
 
-.family-guide__actions .wte-btn {
+.quick__title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+  margin-bottom: 12rpx;
+}
+
+.quick__row {
+  display: flex;
+  gap: 16rpx;
+}
+
+.q-item {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 0 16rpx;
+  border-radius: 16rpx;
+  background: #fff;
+  box-shadow: 0 2rpx 12rpx rgba(180,140,105,.04);
 }
 
-.family-guide__actions .wte-btn + .wte-btn {
-  margin-left: 20rpx;
+.q-item--hover {
+  background: #fef6f0;
 }
 
+.q-item__icon {
+  font-size: 36rpx;
+  line-height: 36rpx;
+  height: 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 日历图标：纯 CSS 绘制，不显示具体日期 */
+.q-item__icon--history {
+  width: 32rpx;
+  height: 32rpx;
+  border: 3rpx solid #b88a6a;
+  border-radius: 6rpx;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.q-item__icon--history::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 7rpx;
+  height: 3rpx;
+  background: #b88a6a;
+}
+
+.q-item__icon--history::after {
+  content: '';
+  position: absolute;
+  left: 6rpx;
+  top: 15rpx;
+  width: 5rpx;
+  height: 5rpx;
+  border-radius: 1rpx;
+  background: #b88a6a;
+  box-shadow: 9rpx 0 0 #b88a6a, 0 9rpx 0 #b88a6a, 9rpx 9rpx 0 #b88a6a;
+}
+
+.q-item__label {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--wte-text);
+}
+
+/* ===== AI 做饭小助手悬浮入口 ===== */
+.robot-fab {
+  position: fixed;
+  right: 28rpx;
+  bottom: calc(56rpx + env(safe-area-inset-bottom));
+  z-index: 100;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: #fff7f1;
+  box-shadow: 0 8rpx 24rpx rgba(255,122,69,.26);
+  border: 4rpx solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .2s;
+}
+.robot-fab--hover {
+  transform: scale(.92);
+}
+/* 做饭的小姑娘形象（内联 SVG，无需额外图片资源） */
+.robot-fab__icon {
+  width: 86rpx;
+  height: 86rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzEiIGZpbGw9IiNmZmYzZWEiLz48cGF0aCBkPSJNMTcgMjVjLTQtMS02LTUtNC05IDEtMyA1LTQgOC0yIDEtNCA1LTcgMTEtN3MxMCAzIDExIDdjMy0yIDctMSA4IDIgMiA0IDAgOC00IDl6IiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNmMmUzZDciIHN0cm9rZS13aWR0aD0iMSIvPjxyZWN0IHg9IjIwIiB5PSIyMyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjYiIHJ4PSIzIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNmMmUzZDciIHN0cm9rZS13aWR0aD0iMSIvPjxwYXRoIGQ9Ik0xNyAzNGMwLTYgNi0xMCAxNS0xMHMxNSA0IDE1IDEwdjNIMTd6IiBmaWxsPSIjOGQ1NTI0Ii8+PGNpcmNsZSBjeD0iMzIiIGN5PSIzNyIgcj0iMTAuNSIgZmlsbD0iI2ZmZGNjMiIvPjxwYXRoIGQ9Ik0yMSAzM2MxLjgtNSA1LjQtNy41IDExLTcuNVM0MS4yIDI4IDQzIDMzYy0zLjItMi02LjYtMy0xMS0zcy03LjggMS0xMSAzeiIgZmlsbD0iIzdhNDYyMCIvPjxjaXJjbGUgY3g9IjI3LjgiIGN5PSIzNy4yIiByPSIxLjciIGZpbGw9IiMzYTJhMjAiLz48Y2lyY2xlIGN4PSIzNi4yIiBjeT0iMzcuMiIgcj0iMS43IiBmaWxsPSIjM2EyYTIwIi8+PGVsbGlwc2UgY3g9IjI0LjIiIGN5PSI0MSIgcng9IjIuMyIgcnk9IjEuNSIgZmlsbD0iI2ZmYjE5OSIgb3BhY2l0eT0iMC44NSIvPjxlbGxpcHNlIGN4PSIzOS44IiBjeT0iNDEiIHJ4PSIyLjMiIHJ5PSIxLjUiIGZpbGw9IiNmZmIxOTkiIG9wYWNpdHk9IjAuODUiLz48cGF0aCBkPSJNMjkuNCA0MS42YzEuMyAxLjQgNCAxLjQgNS4yIDAiIHN0cm9rZT0iI2I1NjU0YSIgc3Ryb2tlLXdpZHRoPSIxLjUiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xOSA1NmMyLTUuNCA2LjYtOC40IDEzLTguNFM0MyA1MC42IDQ1IDU2eiIgZmlsbD0iI2ZmN2E0NSIvPjxwYXRoIGQ9Ik0yNi42IDUwLjRjMS41IDIuMSAzLjIgMy4yIDUuNCAzLjJzMy45LTEuMSA1LjQtMy4yIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMi4xIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48Y2lyY2xlIGN4PSI0Ny41IiBjeT0iMjciIHI9IjIuMiIgZmlsbD0iI2ZmZDZhNSIgb3BhY2l0eT0iMC45Ii8+PC9zdmc+");
+  background-size: 86rpx 86rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+}

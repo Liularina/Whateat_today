@@ -14,6 +14,9 @@
     "verify:cookbook": "node tools/verify-cookbook.js",
     "verify:diet": "node tools/verify-diet.js",
     "verify:shopping": "node tools/verify-shopping.js",
+    "verify:voice": "node tools/verify-voice.js",
+    "verify:chat": "node tools/verify-chat.js",
+    "verify:recommend-diversity": "node tools/verify-recommend-diversity.js",
     "e2e:nutrition": "node tools/e2e-nutrition.js"
   },
   "dependencies": {

@@ -7,8 +7,10 @@
  */
 import { MEAL_TYPE_LABELS } from '../../constants/config';
 import { shoppingService } from '../../services/shopping';
+import { ingredientService } from '../../services/ingredient';
 import { getErrorMessage } from '../../utils/cloud';
-import type { IngredientCategoryCode } from '../../types/ingredient';
+import { toDateString } from '../../utils/shelf-life';
+import type { IngredientCategoryCode, IngredientInput, UnitCode } from '../../types/ingredient';
 import type { ShoppingItem, ShoppingSummary } from '../../types/shopping';
 
 /* --------------------- 展示层结构 --------------------- */
@@ -82,6 +84,10 @@ Page({
     dateLabel: '',
     groups: [] as ShoppingGroupView[],
     summary: EMPTY_SUMMARY,
+
+    /** 采购完毕入库中 / 已入库 */
+    finishing: false,
+    finished: false,
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -93,7 +99,7 @@ Page({
     void this.load();
   },
 
-  async load() {
+  async load(silent = false) {
     const app = getApp<IAppOption>();
     const family = app.globalData.family;
     if (!family) {
@@ -101,7 +107,7 @@ Page({
       return;
     }
 
-    this.setData({ loading: true, error: '' });
+    if (!silent) this.setData({ loading: true, error: '' });
     try {
       let list = null;
       if (this.data.menuId) {
@@ -206,24 +212,117 @@ Page({
     }
   },
 
-  /** 一键复制清单文本 */
-  onCopy() {
-    const lines: string[] = [];
-    lines.push('采购清单' + (this.data.dateLabel ? ' · ' + this.data.dateLabel : ''));
+  /**
+   * 采购完毕：把「还需采购」的数量补充进家庭食材库存。
+   *
+   * - 同名同单位已有食材 → 在原数量上累加；
+   * - 没有则新建，购买日期记为今天；
+   * - 单位不在食材支持范围内（如 ml）跳过并提示，不静默篡改单位。
+   */
+  async onFinishShopping() {
+    const app = getApp<IAppOption>();
+    const family = app.globalData.family;
+    if (!family || this.data.finishing) return;
+    if (this.data.finished) {
+      wx.showToast({ title: '本次清单已入库', icon: 'none' });
+      return;
+    }
+
+    const UNITS: UnitCode[] = ['g', 'kg', '个', '袋', '盒'];
+    const purchaseDate = toDateString(new Date());
+    const targets: Array<{ item: ShoppingItem; unit: UnitCode }> = [];
+    let unsupported = 0;
+
     this.data.groups.forEach((group) => {
-      lines.push('【' + group.label + '】');
       group.items.forEach((item) => {
-        const tail = item.enough ? '（已备齐）' : ' 需购 ' + formatAmount(item.toBuy, item.unit);
-        lines.push('- ' + item.name + tail + (item.checked ? ' ✓' : ''));
+        if (item.enough || item.toBuy <= 0) return;
+        if (UNITS.indexOf(item.unit as UnitCode) === -1) {
+          unsupported += 1;
+          return;
+        }
+        targets.push({ item: item, unit: item.unit as UnitCode });
       });
     });
 
-    wx.setClipboardData({
-      data: lines.join('\n'),
-      success: () => {
-        wx.showToast({ title: '清单已复制', icon: 'none' });
-      },
-    });
+    if (targets.length === 0) {
+      wx.showToast({ title: '没有需要入库的食材', icon: 'none' });
+      return;
+    }
+
+    this.setData({ finishing: true });
+    try {
+      const existing = await ingredientService.list(family._id);
+      const stockMap: Record<string, { id: string; quantity: number }> = {};
+      existing.forEach((it) => {
+        const key = (it.standardName || it.name) + '|' + it.unit;
+        if (!stockMap[key]) stockMap[key] = { id: it._id, quantity: it.quantity };
+      });
+
+      let added = 0;
+      let merged = 0;
+      const failed: string[] = [];
+
+      for (const { item, unit } of targets) {
+        const quantity = Math.round(item.toBuy * 100) / 100;
+        if (!(quantity > 0) || quantity > 9999) {
+          failed.push(item.name);
+          continue;
+        }
+
+        const key = item.name + '|' + unit;
+        const stock = stockMap[key];
+
+        try {
+          if (stock) {
+            const next = Math.min(9999, Math.round((stock.quantity + quantity) * 100) / 100);
+            await ingredientService.update(family._id, stock.id, { quantity: next });
+            stock.quantity = next;
+            merged += 1;
+          } else {
+            const input: IngredientInput = {
+              name: item.name,
+              quantity: quantity,
+              unit: unit,
+              category: item.category,
+              purchaseDate: purchaseDate,
+            };
+            const created = await ingredientService.create(family._id, input);
+            stockMap[key] = { id: created._id, quantity: quantity };
+            added += 1;
+          }
+        } catch {
+          failed.push(item.name);
+        }
+      }
+
+      const succeeded = added + merged > 0;
+
+      // 库存已变化，重算清单，让「待采购 / 已备齐 / 已勾选」立即刷新。
+      // 入库失败不影响已写入的食材，只提示用户稍后手动重新生成。
+      if (succeeded) {
+        try {
+          await shoppingService.generate(family._id, this.data.menuId, { resetChecked: true });
+          await this.load(true);
+        } catch (_e) {
+          // 清单刷新失败不阻断入库结果
+        }
+      }
+
+      this.setData({ finishing: false, finished: succeeded });
+
+      const parts: string[] = [];
+      if (added > 0) parts.push('新增 ' + added + ' 项');
+      if (merged > 0) parts.push('补充 ' + merged + ' 项');
+      let tip = parts.length > 0 ? '已入库：' + parts.join('，') : '入库失败';
+
+      if (unsupported > 0) tip += '；' + unsupported + ' 项单位不支持';
+      if (failed.length > 0) tip += '；' + failed.length + ' 项失败';
+
+      wx.showToast({ title: tip, icon: 'none', duration: 2500 });
+    } catch (e) {
+      this.setData({ finishing: false });
+      wx.showToast({ title: getErrorMessage(e, '入库失败'), icon: 'none' });
+    }
   },
 
   onGoMenu() {

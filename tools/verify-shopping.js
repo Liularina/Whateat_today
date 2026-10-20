@@ -386,6 +386,39 @@ async function runGenerateTests() {
   const firstItem = saved2[0].items.find((i) => i.key === res1.data.items[0].key);
   check('刷新保留勾选状态', firstItem && firstItem.checked === true);
 
+  // 采购完毕：按待购量补齐库存后重新生成，统计必须立即刷新
+  const beforeSummary = res1.data.summary;
+  res1.data.items.forEach((it) => {
+    if (it.enough || it.toBuy <= 0) return;
+    store.ingredients.push({
+      _id: 'ing-' + it.key,
+      familyId: 'fam-1',
+      name: it.name,
+      standardName: it.name,
+      quantity: it.toBuy,
+      unit: it.unit,
+      category: it.category,
+      expireDate: null,
+      purchaseDate: null,
+      shelfLifeDays: null,
+      remark: '',
+      createdBy: 'user-a',
+      createdAt: '2026-10-10T10:00:00.000Z',
+      updatedAt: '2026-10-10T10:00:00.000Z',
+    });
+  });
+
+  const resStock = await callShopping('generateShoppingList', {
+    familyId: 'fam-1',
+    menuId: MENU_ID,
+    resetChecked: true,
+  }, 'openid-a');
+  check('补齐库存后重新生成成功', resStock.success === true);
+  checkEqual('补齐库存后待采购归零', resStock.data.summary.toBuyCount, 0);
+  check('补齐库存后已备齐增加',
+    resStock.data.summary.inStockCount > beforeSummary.inStockCount);
+  checkEqual('resetChecked 后已勾选归零', resStock.data.summary.checkedCount, 0);
+
   // 未确认菜单被拒
   const res3 = await callShopping('generateShoppingList', {
     familyId: 'fam-1',
