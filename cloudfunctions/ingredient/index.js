@@ -303,9 +303,12 @@ async function resolveStandardName(name) {
 /**
  * 校验并归一化食材入参。
  * 只取白名单字段，多余字段直接丢弃（例如客户端伪造的 familyId / createdBy / standardName）。
+ *
+ * options.allowZero：修改时允许数量为 0（用完但保留条目），新增时仍然要求 > 0。
  */
-function buildIngredientPayload(input) {
+function buildIngredientPayload(input, options) {
   const source = input && typeof input === 'object' ? input : {};
+  const allowZero = !!(options && options.allowZero);
 
   const name = normalizeText(source.name);
   if (!name) {
@@ -316,7 +319,10 @@ function buildIngredientPayload(input) {
   }
 
   const quantity = typeof source.quantity === 'number' ? source.quantity : Number(source.quantity);
-  if (!Number.isFinite(quantity) || quantity <= 0) {
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    return { error: allowZero ? '数量不能小于 0' : '请填写大于 0 的数量' };
+  }
+  if (!allowZero && quantity <= 0) {
     return { error: '请填写大于 0 的数量' };
   }
   if (quantity > INGREDIENT_QUANTITY_MAX) {
@@ -491,7 +497,7 @@ async function handleUpdateIngredient(event, wxContext, requestId, logContext) {
     return fail('INVALID_PARAMS', '缺少食材 id');
   }
 
-  const parsed = buildIngredientPayload(event.input);
+  const parsed = buildIngredientPayload(event.input, { allowZero: true });
   if (parsed.error) {
     return fail('INVALID_PARAMS', parsed.error);
   }

@@ -33,6 +33,8 @@ export interface IngredientView {
   isWarning: boolean;
   /** 估算卡路里展示文案，如「约 45 kcal」；无数据时为空字符串 */
   calorieText: string;
+  /** 数量已归零（用完但保留条目） */
+  isEmpty: boolean;
   remark: string;
 }
 
@@ -104,7 +106,7 @@ export function toIngredientView(
     aliasText: item.name && item.name !== standardName ? '（' + item.name + '）' : '',
     quantity: quantity,
     unit: unit,
-    quantityText: quantity + ' ' + unit,
+    quantityText: quantity > 0 ? quantity + ' ' + unit : '已用完',
     category: item.category,
     categoryLabel: getCategoryLabel(item.category),
     expireDate: expireDate,
@@ -116,6 +118,8 @@ export function toIngredientView(
     isExpired: shelf.status === 'expired',
     isWarning: shelf.status === 'warning',
     calorieText: buildCalorieText(item._id, calorieMap),
+    // 数量为 0 是「用完但保留」，不等于删除，列表需要单独标注
+    isEmpty: quantity <= 0,
     remark: item.remark || '',
   };
 }
@@ -138,10 +142,38 @@ export function sortByShelfLife(views: IngredientView[]): IngredientView[] {
 }
 
 /**
+ * 组内排序：剩余数量从多到少。
+ *
+ * 数量相同再按临期状态（过期 → 临期 → 新鲜 → 无到期日）、
+ * 再按剩余天数升序，最后按标准名稳定排序。
+ * 数量为 0（已用完）的自然排在组内最后。
+ */
+export function sortByQuantityDesc(views: IngredientView[]): IngredientView[] {
+  return views.slice().sort((a, b) => {
+    const quantityDiff = (b.quantity || 0) - (a.quantity || 0);
+    if (quantityDiff !== 0) {
+      return quantityDiff;
+    }
+    const orderDiff = STATUS_ORDER[a.shelfStatus] - STATUS_ORDER[b.shelfStatus];
+    if (orderDiff !== 0) {
+      return orderDiff;
+    }
+    if (a.daysLeft !== null && b.daysLeft !== null && a.daysLeft !== b.daysLeft) {
+      return a.daysLeft - b.daysLeft;
+    }
+    return a.standardName.localeCompare(b.standardName, 'zh-Hans-CN');
+  });
+}
+
+/**
  * 按分类聚合成折叠分组。
  * 分组顺序固定跟随 INGREDIENT_CATEGORIES；空分类不展示；
  * category 不在枚举内的历史数据一律归入「其他」。
  * dairy 在展示层归入 soy_product（蛋奶豆制品）。
+ *
+ * 组内顺序为剩余数量从多到少（数量相同再按临期程度）。
+ * 默认全部折叠：进页面先看到分类概览，需要时再逐个展开。
+ * collapsed 中显式写了 false 的分类才展开。
  *
  * calorieMap 为可选的「食材 _id → 热量(kcal)」，由调用方从服务端结果构建。
  */
@@ -170,7 +202,8 @@ export function buildCategoryGroups(
       continue;
     }
 
-    const sorted = sortByShelfLife(views);
+    // 需求：先按分类分组，组内按剩余数量从多到少排序
+    const sorted = sortByQuantityDesc(views);
     let warningCount = 0;
     for (const v of sorted) {
       if (v.isExpired || v.isWarning) {
@@ -178,6 +211,7 @@ export function buildCategoryGroups(
       }
     }
 
+    const state = collapsed[option.value];
     groups.push({
       code: option.value,
       label: option.label,
@@ -186,7 +220,7 @@ export function buildCategoryGroups(
       count: sorted.length,
       warningCount: warningCount,
       hasWarning: warningCount > 0,
-      collapsed: !!collapsed[option.value],
+      collapsed: state === undefined ? true : !!state,
     });
   }
 

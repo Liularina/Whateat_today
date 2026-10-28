@@ -7,6 +7,12 @@
     <view class="page-header">
       <view class="page-header__title">AI 推荐结果</view>
       <view class="page-header__subtitle" wx:if="{{mealTypeLabel}}">{{mealTypeLabel}} · {{servings}} 人份 · {{menuCount}} 套方案</view>
+      <view class="cook-hint" wx:if="{{cookName}}">
+        本餐掌勺人：{{cookName}}{{isCook ? '（是你）' : ' · 你可以先在点菜页表达偏好'}}
+      </view>
+      <view class="confirmed-banner" wx:if="{{planStatus === 'confirmed'}}" bindtap="onOpenConfirmedMenu">
+        本餐次菜单已由掌勺人确认 · 查看最终菜单 ›
+      </view>
     </view>
 
     <view class="menus">
@@ -48,9 +54,10 @@
           </view>
         </view>
 
-        <view class="wte-btn wte-btn--primary wte-btn--block menu-card__btn" data-index="{{index}}" bindtap="onSelectMenu">
+        <view class="wte-btn wte-btn--primary wte-btn--block menu-card__btn" wx:if="{{isCook && planStatus !== 'confirmed'}}" data-index="{{index}}" bindtap="onSelectMenu">
           选这套
         </view>
+        <view class="non-cook-hint" wx:elif="{{planStatus !== 'confirmed'}}">仅本餐掌勺人可以选择并确认菜单</view>
       </view>
     </view>
 
@@ -122,18 +129,20 @@
         重新推荐中...
       </view>
 
-      <view class="wte-btn wte-btn--primary wte-btn--block btn-gap" bindtap="onConfirmMenu">
-        确认菜单
+      <view class="wte-btn wte-btn--primary wte-btn--block btn-gap" bindtap="onBackToBoard">
+        保存点单，等家人提建议
+      </view>
+      <view class="wte-btn wte-btn--ghost wte-btn--block btn-gap" bindtap="onConfirmMenu">
+        直接锁定菜单
       </view>
     </view>
 
-    <view class="tips" wx:if="{{!confirmed}}">锁定你不希望被替换的菜品，未锁定的菜品可以单独换或批量重推。</view>
-    <view class="tips" wx:else>菜单已确认！后续可以在「菜单」页查看和管理。</view>
+    <view class="tips" wx:if="{{!confirmed}}">点单已保存，家人可以在「点菜」页提建议；最终菜单由你锁定，不必等所有人。</view>
+    <view class="tips" wx:else>菜单已锁定！后续可以在「菜单」页查看，做完饭后家人就能评价。</view>
 
-    <!-- Phase 9：已确认后发起点单 -->
     <view class="actions" wx:if="{{confirmed}}">
-      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onStartOrder">
-        发起家庭点单
+      <view class="wte-btn wte-btn--primary wte-btn--block" bindtap="onBackToBoard">
+        回到点菜页
       </view>
     </view>
   </block>

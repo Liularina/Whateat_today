@@ -59,6 +59,12 @@
   font-size: 28rpx;
 }
 
+.topbar__members {
+  margin-left: 10rpx;
+  font-size: 22rpx;
+  color: #c9a98f;
+}
+
 /* ===== 提示条 ===== */
 .banner {
   padding: 12rpx 0;
@@ -128,18 +134,29 @@
   color: var(--wte-text);
 }
 
+/* 餐次标签：text 是行内元素，padding 不撑开行盒，改为 inline-flex 居中 */
 .menu-block__meal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34rpx;
   margin-left: 10rpx;
-  padding: 2rpx 12rpx;
+  padding: 0 12rpx;
   border-radius: 999rpx;
   font-size: 22rpx;
   font-weight: 500;
+  line-height: 1;
   color: #ff7a45;
   background: #fff3ed;
 }
 
 .menu-block__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34rpx;
   font-size: 24rpx;
+  line-height: 1;
   color: var(--wte-text-weak);
 }
 
@@ -546,4 +563,67 @@
   background-size: 86rpx 86rpx;
   background-repeat: no-repeat;
   background-position: center;
+}
+/* ===== Phase 1：本餐次协作状态 ===== */
+.collab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 14rpx;
+  background: #fffdfa;
+  border: 1rpx solid #f0e6dc;
+}
+
+.collab--hover {
+  background: #fff3e8;
+}
+
+.collab__main {
+  display: flex;
+  flex-direction: column;
+}
+
+.collab__cook {
+  font-size: 25rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.collab__count {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: var(--wte-text-weak);
+}
+
+.collab__right {
+  display: flex;
+  align-items: center;
+}
+
+/* 状态胶囊：text 是行内元素，只给 padding 会让文字贴底，
+   这里改成 inline-flex + 固定行高，让「已确认 / 选择中」在胶囊里真正居中 */
+.collab__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36rpx;
+  padding: 0 14rpx;
+  border-radius: 999rpx;
+  background: #fff3e8;
+  font-size: 21rpx;
+  line-height: 1;
+  color: var(--wte-primary);
+}
+
+.collab__status--done {
+  background: #eef7ee;
+  color: #3d8b40;
+}
+
+.collab__link {
+  margin-left: 14rpx;
+  font-size: 23rpx;
+  color: var(--wte-text-weak);
 }

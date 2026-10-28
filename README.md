@@ -38,8 +38,11 @@ cloudfunctions/
 ├── recipe/                  # index.js + openai-compatible-client.js（菜谱库 + AI 生成做法）
 ├── ai-config/               # index.js + openai-compatible-client.js + ai-service.js（AI 统一入口 + 模式路由 + 额度）
 ├── menu/                    # index.js + openai-compatible-client.js + ai-service.js（菜单保存/锁定/换菜/确认）
-├── order/                   # index.js（创建点单/提交选择/汇总/关闭）
+├── order/                   # index.js（创建点单/提交选择/汇总/关闭/存量收尾）
 ├── recommend/               # index.js + openai-compatible-client.js + ai-service.js（推荐 3 套菜单）
+├── shopping/                # index.js + shopping-core.js（购物清单聚合）
+├── chat/                    # index.js + openai-compatible-client.js + ai-service.js（AI 做饭机器人对话）
+├── cleanup/                 # index.js（定时维护：48 小时超时收尾 + 6 个月历史清理）
 └── recommend/ menu/
 tools/                       # 本地验证套件（内存版云开发，不依赖真实云环境）
 ```
@@ -71,10 +74,33 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 
 ## 数据库集合
 
-云开发控制台需要手动创建以下集合（权限建议：**仅创建者可读写**，所有读写经由云函数）：
+云开发控制台需要手动创建以下集合（权限建议：**仅创建者可读写**，所有读写经由云函数）。
+共 **22 个**，缺任意一个对应的接口都会返回 `DB_NOT_READY` 或功能降级：
 
-`users`、`families`、`family_members`、`ingredients`、`recipes`、`menus`、
-`family_orders`、`family_order_items`、`nutrition_facts`、`ingredient_aliases`、`ai_logs`
+| # | 集合 | 用途 | 缺失时 |
+| --- | --- | --- | --- |
+| 1 | `users` | 用户与 openid 绑定 | 登录失败 |
+| 2 | `families` | 家庭 | 建家失败 |
+| 3 | `family_members` | 家庭成员关系 | 全部业务不可用 |
+| 4 | `ingredients` | 食材库存 | `DB_NOT_READY` |
+| 5 | `ingredient_aliases` | 食材别名 | 退回内置别名表（降级可用） |
+| 6 | `nutrition_facts` | 营养基础数据 | 退回内置数据（降级可用） |
+| 7 | `recipes` | 菜谱库 | `DB_NOT_READY` |
+| 8 | `generated_recipes` | AI 生成做法缓存 | `DB_NOT_READY` |
+| 9 | `family_cookbook` | 家庭菜谱本 | `DB_NOT_READY` |
+| 10 | `cookbook_versions` | 菜谱本版本历史 | `DB_NOT_READY` |
+| 11 | `menus` | 菜单（草稿 / 已确认 / 已完成） | 菜单功能不可用 |
+| 12 | `menu_plans` | 餐次共享方案 | 看板不展示方案，主流程不受影响 |
+| 13 | `meal_preferences` | 每餐口味偏好 | 按无偏好处理 |
+| 14 | `meal_reviews` | 饭后评价 | 提交评分 `DB_NOT_READY` |
+| 15 | `chef_points` | 掌勺人积分流水 | 可用但不记积分、不显示等级 |
+| 16 | `family_orders` | 点单 | 点单功能不可用 |
+| 17 | `family_order_items` | 点单明细 | 明细读不到 |
+| 18 | `shopping_lists` | 购物清单 | `DB_NOT_READY` |
+| 19 | `user_ai_configs` | 自定义 AI 配置 | `DB_NOT_READY` |
+| 20 | `user_ai_prefs` | AI 模式偏好 | `DB_NOT_READY` |
+| 21 | `ai_usage` | 每日 AI 额度计数 | 额度不生效 |
+| 22 | `ai_logs` | AI 调用日志 | 只告警，不影响主流程 |
 
 > Phase 2 / Phase 3 实际使用：`users`、`families`、`family_members`。
 > Phase 4 额外使用：`ingredients`（**必需**，缺集合时接口返回 `DB_NOT_READY`）、
@@ -84,6 +110,10 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 > Phase 6 额外使用：`recipes`（**必需**，缺集合时 `recipe` 云函数返回 `DB_NOT_READY`，
 > 初始化也写不进去）。
 > Phase 10 额外使用：`generated_recipes`（AI 生成的做法缓存；缺集合时返回提示，不阻碍查看原始菜谱。）
+> Phase 1 餐次协作：`menu_plans`、`meal_preferences`（**可选**，缺集合时点菜页不展示共享方案，
+> 原有「推荐 → 确认 → 点单」流程不受影响）。
+> 阶段二饭后评价：`meal_reviews`（**必需**，缺集合时提交评分返回 `DB_NOT_READY`）、
+> `chef_points`（**必需**，缺集合时完成与评分仍可用，只是不记积分、不显示等级）。
 
 ### 索引创建清单（Phase 11 已按真实查询核对）
 
@@ -133,6 +163,83 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 | `ingredients` | `familyId` |
 | `nutrition_facts` | `standardName` |
 
+**`menu_plans`（本餐次共享方案）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询 |
+| --- | --- | --- | --- |
+| 6 | `familyId`, `date`, `mealType`, `status`, `updatedAt` | ↑, ↑, ↑, ↑, ↓ | `menu/index.js` `readMealPlan`（点菜页按餐次） |
+| 7 | `familyId`, `date`, `status`, `updatedAt` | ↑, ↑, ↑, ↓ | 首页不限定餐次，取当天最近更新的一份 |
+
+**`meal_preferences`（成员偏好）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询 |
+| --- | --- | --- | --- |
+| 8 | `familyId`, `date`, `mealType` | ↑, ↑, ↑ | `menu/index.js` `loadPreferences` |
+| 9（可选） | `familyId`, `date`, `mealType`, `userId` | ↑, ↑, ↑, ↑ | 同一成员一条记录的定位（并发去重） |
+
+**`meal_reviews`（阶段二：每位成员每餐一条评价）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询 |
+| --- | --- | --- | --- |
+| 10 | `familyId`, `menuId` | ↑, ↑ | `menu/index.js` `loadReviews`（按用餐记录取所有成员评分） |
+
+记录 `_id` 固定为 `rv_<menuId>_<userId>`，主键本身就是索引，按成员读写不需要额外索引。
+
+**`chef_points`（阶段二：掌勺人积分流水）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询 |
+| --- | --- | --- | --- |
+| 11 | `familyId`, `cookId`, `createdAt` | ↑, ↑, ↓ | `menu/index.js` `loadPointsLedger`（求和 + 取最近一笔） |
+
+记录 `_id` 固定为 `pt_<menuId>_<type>`，这一条固定键同时是幂等键，不需要额外索引。
+
+**`recipes`（公共内置菜谱 + 家庭 AI 菜谱）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询 |
+| --- | --- | --- | --- |
+| 13 | `source`, `isActive` | ↑, ↑ | `menu/index.js` `loadRecipes`（内置菜谱）；`recommend/index.js:791` 候选加载；`recipe/index.js:264` `listRecipes` |
+| 14 | `source`, `familyId`, `isActive` | ↑, ↑, ↑ | `menu/index.js` `loadRecipes`（本家庭 AI 菜谱） |
+| 15 | `name`, `isActive` | ↑, ↑ | `recommend/index.js:620`、`menu/index.js:389` 落库前查同名菜 |
+
+- #13 是 #14 的前缀，但**两条都需要**：`loadRecipes` 刻意用两次独立查询而非 `$or`，
+  每次查询都能命中各自索引的最左前缀，也不依赖 `$or` 的线上支持。
+- #15 用于库外菜落库前的同名复用检查。数据量小，**可以不建**，建了可避免全表扫描。
+- `recipe/index.js` 的列表查询在 `source=builtin` 上还会叠加 `category` / `name` 正则，
+  当前内置菜谱仅 200 道，`limit(1000)` 一次读回内存过滤，#13 已足够。
+
+**`cleanup` 定时维护（跨家庭扫描）**
+
+| # | 索引字段（顺序） | 方向 | 对应查询代码 |
+| --- | --- | --- | --- |
+| 16（建议） | `menus`: `status`, `createdAt` | ↑, ↑ | `cleanup/index.js` `findStale`（超时未收尾菜单） |
+| 17（建议） | `menus`: `status`, `updatedAt` | ↑, ↑ | 同上（更新过但超时的菜单） |
+| 18（建议） | `menu_plans`: `status`, `createdAt` | ↑, ↑ | `cleanup/index.js` `findStale`（超时未锁定方案） |
+| 19（建议） | `menu_plans`: `status`, `updatedAt` | ↑, ↑ | 同上 |
+
+- 这四条查询**不带 `familyId`**，是跨家庭的全量扫描，因此上面的 #1 / #6 / #7
+  最左前缀都是 `familyId`，**完全用不上**。
+- 目前数据量小（每家庭每天最多 3 餐），每天只跑一次、单次上限 500 条，
+  不建索引也能接受，代价是全表扫描。
+- 当 `menus` 或 `menu_plans` 超过约 10 万条时建议补 #16~#19，
+  否则 cleanup 的执行时间会随总量线性增长，可能撞上云函数超时。
+- 之所以要分别建 `createdAt` 与 `updatedAt` 两条：老数据没有 `updatedAt`，
+  兜底查询按 `createdAt` 判断，两类查询各自需要匹配的最左前缀。
+
+### 本轮新增字段（无需新建集合）
+
+AI 推荐升级后，`recipes` 中新增两类文档，**复用现有集合，不需要建新集合**：
+
+| 字段 | 取值 | 说明 |
+| --- | --- | --- |
+| `source` | `builtin` / `ai_generated` | 原有字段，新增 `ai_generated` 取值 |
+| `familyId` | 家庭 ID | AI 生成的菜谱归属家庭，读取时按此隔离 |
+| `createdBy` | 用户 `_id` | AI 菜谱的生成者 |
+| `steps` | `[]` | AI 菜谱先不写做法，进入详情页时按需生成 |
+
+- 内置菜谱没有 `familyId` 字段，这是正常的：它们对所有家庭可见，
+  查询时按 `source='builtin'` 单独取，不参与家庭隔离。
+- 若历史数据里已有同名 `source` 字段的其它取值，不影响现有查询。
+
 **字段可用性核对**：`menus` 的所有写入路径（`menu/index.js:308` `createMenu`、
 `confirmMenu`、`setMenuItemLocked`、`replaceMenuItem`、`regenerateMenu`）都会落
 `familyId` / `status` / `createdAt`；`family_orders` 的写入路径（`order/index.js:236`）
@@ -159,10 +266,11 @@ tools/                       # 本地验证套件（内存版云开发，不依�
 ### AI 调用超时与「思考模式」
 
 - 微信云函数执行时长上限为 **60 秒**。必须在云开发控制台把 `ai-config` / `recommend` /
-  `menu` / `recipe` 四个函数的**超时时间调到 60 秒**，否则推荐、生成做法会被平台提前终止，
-  前端只能看到一个笼统的网络错误，排查不到真正原因。
-- 四个函数各自带一份 `openai-compatible-client.js`，**内容必须完全一致**
-  （改一个就要同步另外三个，否则线上行为不一致）。
+  `menu` / `recipe` / `chat` 五个函数的**超时时间调到 60 秒**，否则推荐、生成做法、
+  对话会被平台提前终止，前端只能看到一个笼统的网络错误，排查不到真正原因。
+- 五个函数各自带一份 `openai-compatible-client.js` 与 `ai-service.js`，**内容必须完全一致**
+  （改一个就要同步另外四个，否则线上行为不一致）。
+  当前 5 份的 SHA256 一致，可用 `md5sum cloudfunctions/*/ai-service.js` 核对。
 - 客户端默认在请求体里带 `chat_template_kwargs: { enable_thinking: false }` 关闭思考模式：
   思考型模型（Qwen3 系列等）会先输出大段推理再给正文，这些内容同样耗费生成时间，
   在 60 秒上限内极易超时；本项目提示词已把输出约束为纯 JSON，不需要模型自行推理。
@@ -294,7 +402,7 @@ Phase C 将「内置 AI」（开箱即用）加入项目，与已有的用户自
 
 ### 统一入口
 
-- `ai-service.js`（4 个 AI 云函数各一份，SHA256 一致）提供 `resolveAiCall` / `runAiCall`。
+- `ai-service.js`（5 个 AI 云函数各一份，SHA256 一致）提供 `resolveAiCall` / `runAiCall`。
 - `resolveAiCall(db, userId)` 按用户偏好选择模式 → 检查额度 → 返回 `aiConfig`（内置走环境变量明文，
   自定义走密文）。
 - `runAiCall(db, userId, options, fn)` 在 `resolveAiCall` 基础上包装调用、计时、记日志。
@@ -326,8 +434,22 @@ Phase C 将「内置 AI」（开箱即用）加入项目，与已有的用户自
    - `AI_BUILTIN_MODEL=your-model-name`
    - `AI_BUILTIN_API_KEY=sk-xxxxxxxx`
    - `AI_BUILTIN_DAILY_QUOTA=20`（可选，默认 20）
-3. 上传 `ai-config` / `menu` / `recipe` / `recommend` 四个云函数（含 `ai-service.js` 与 `openai-compatible-client.js`）
-4. **验证**：`npm run verify:ai`（108 项全部通过即就绪）
+3. 上传 `ai-config` / `menu` / `recipe` / `recommend` / `chat` 五个云函数（含 `ai-service.js` 与 `openai-compatible-client.js`）
+4. **验证**：`npm run verify:ai`（112 项全部通过即就绪）
+
+### AI 做饭机器人（chat 云函数）
+
+| 项目 | 说明 |
+| --- | --- |
+| action | `chat` |
+| 入参 | `familyId`、`message`、`history`（可选，最近若干轮） |
+| 权限 | 必须是该家庭成员（`requireFamilyMember` 复核） |
+| 额度 | 复用 `ai-service` 的每日额度与限流，不单独计数 |
+| 话题约束 | 系统提示词 + 服务端轻量规则双重限制在「做饭 / 家庭饮食」范围 |
+| 缺集合 | `ai_usage` 缺失时额度不生效；`ai_logs` 缺失只告警 |
+
+`chat` 与本项目其它 AI 函数共用同一份 `ai-service.js` / `openai-compatible-client.js`，
+调用失败时返回统一错误结构（`AI_QUOTA_EXCEEDED` / `AI_DB_NOT_READY` 等），前端据 `code` 提示。
 
 ## 营养计算（Phase 5）
 
@@ -385,8 +507,8 @@ Phase C 将「内置 AI」（开箱即用）加入项目，与已有的用户自
 - **`getRecipe` 入参**：`{ recipeId }`，返回 `{ recipe }`。
   `recipeId` 缺失或非法 → `INVALID_PARAMS`；不存在**或已禁用** →
   `RECIPE_NOT_FOUND`（两种情况同一个错误码，不泄露某个菜谱是否存在）。
-- **内置数据**：`cloudfunctions/recipe/recipe-data.js` 共 **150 道**菜谱，
-  （家常菜 45 / 蔬菜类 40 / 汤类 35 / 主食类 30），每道含简介、标签、难度、总时长、
+- **内置数据**：`cloudfunctions/recipe/recipe-data.js` 共 **200 道**菜谱，
+  （家常菜 45 / 蔬菜类 40 / 汤类 35 / 主食类 30 / 儿童餐 25 / 减肥餐 25），每道含简介、标签、难度、总时长、
   适用人数、量化食材与逐道编写的步骤（每步带独立 `minutes`）。
   两条硬性约束：
   - **不允许「适量 / 少许」这类无法换算的写法** —— 否则 Phase 7 无法复用营养数据；
@@ -511,7 +633,8 @@ Phase 9 实现家庭点单闭环：从已确认菜单发起点单 → 家庭成�
 | `getOrder` | 查询点单详情（含菜品列表、当前用户选择、权限信息） |
 | `submitOrderItems` | 成员批量提交/修改自己的选择（覆盖式，非追加） |
 | `getOrderSummary` | 管理员查看汇总（按菜品 + 按成员） |
-| `closeOrder` | 管理员/发起人关闭点单（status: closed，保存最终汇总快照） |
+| `closeOrder` | 管理员/发起人关闭点单（status: closed，保存最终汇总快照）；未超时点单要求全员提交份数，**超过 48 小时的点单可直接关闭** |
+| `cleanupOpenOrders` | 一次性把本家庭所有 `open` 点单收尾为 `closed`（`closedBy=system`、`closeReason=legacy_cleanup`） | 仅家庭管理员；单次最多 50 条，可重复执行 |
 
 ### 数据模型
 
@@ -704,19 +827,304 @@ Phase E 补齐从菜单到采买的最后一公里，并引入过敏原 / 忌口
 - 不在前端展示或编辑过敏原 / 忌口标签（偏好设置留给家庭设置页后续迭代）
 - 不根据勾选自动更新库存
 
+## 餐次协作（Phase 1）
+
+目标：一顿餐只有一个发起人（即掌勺人），由他从 AI 推荐里挑菜保存成本餐点单；
+家人只对被保存的菜提建议；最终菜单由掌勺人锁定，掌勺人做完了家人才能评价加分。
+
+### 角色与权限
+
+- **一顿餐只有一个掌勺人**，由 `menu_plans.cookId` 决定，不是身份枚举。
+  本餐次第一个发起推荐的人就是掌勺人；同一日期 + 餐次已有方案时，
+  其他人再发起只会拿到同一份方案，不能另起一套。
+- **管理员 ≠ 掌勺人**：管理员不会自动获得锁定 / 改菜权。
+  交接只能由**当前掌勺人**发起；管理员无法接管一个还在家庭里的掌勺人。
+- **兜底例外**：掌勺人已经退群（或方案里没有掌勺人）时，这一餐否则会永久卡死，
+  此时允许家庭管理员接管（`canTakeOver`）。判定集中在 `resolveCookAuthority`，
+  `saveMenu` / `setMealCook` / 看板共用同一套结论。
+- **掌勺人**：从推荐结果里挑菜、保存点单、随时锁定（**不必等家人全部提完建议**）、
+  标记完成制作、交接掌勺人、换一批推荐。
+- **干饭人**：查看掌勺人保存的点单，对每道菜点「想吃 / 不想吃」、留言；
+  **不能改菜、不能锁菜单**。建议只作参考，不影响最终菜单内容。
+- **锁定之后**：家人才能评价；掌勺人本人不参与自己这餐的评价（避免自评刷分），
+  评分汇总结算成掌勺人积分。
+
+### 一次完整流程
+
+1. 有人发起 AI 推荐 → 成为本餐次掌勺人（唯一）。
+2. 掌勺人在推荐结果页挑菜 → 「保存点单」→ 生成 `menus.status = 'draft'`，
+   并把 `draftMenuId` 回写到 `menu_plans`。
+3. 干饭人在「点菜」页对这道点单里的菜点想吃 / 不想吃。建议不改变菜单。
+4. 掌勺人在「点菜」页看到「谁想吃、谁不想吃」后**锁定菜单**；
+   家人没提完也可以直接锁定 → `menus.status = 'confirmed'`。
+5. 掌勺人做完 → 「完成制作」→ `menus.status = 'completed'`，写入菜品快照。
+6. 干饭人评价 → 汇总平均分 → 折算成掌勺人积分（一餐只结算一次）。
+
+### 数据模型
+
+`menu_plans`（每家庭 / 每天 / 每餐次一份有效方案）
+
+| 字段 | 说明 |
+| --- | --- |
+| `familyId`, `date`, `mealType`, `servings` | 归属与份量；`date` 为北京时间 |
+| `status` | `open` 未锁定 / `confirmed` 已锁定 / `superseded` 已被新版本取代 / `expired` 48 小时未推进自动作废 |
+| `version` | 同一餐次重新生成时递增 |
+| `cookId`, `cookName` | 当前掌勺人（= 发起人） |
+| `cookHistory` | 交接审计（最近 20 条，含操作人 / 前后掌勺人 / 时间） |
+| `draftMenuId` | 掌勺人保存的点单（`menus` 草稿）；为空表示还没保存 |
+| `plans[]` | AI 返回的 2–3 套候选；**只给掌勺人挑菜用**，不再对外投票 |
+| `menuId`, `confirmedBy`, `confirmedAt` | 锁定后回写 |
+| `generatedBy`, `createdAt`, `updatedAt` | 生成人与时间 |
+| `type: plan_lock`（同集合） | 生成锁文档，`_id = lock_家庭_日期_餐次`，3 分钟过期；不参与方案查询 |
+
+`meal_preferences`（每位成员每餐次一条）
+
+| 字段 | 说明 |
+| --- | --- |
+| `planId` | 方案文档 `_id`（服务端校验归属） |
+| `menuId` | 建议所针对的草稿点单；掌勺人换菜后旧建议自然失效 |
+| `dishVotes` | `[{ recipeId, vote: want/avoid }]`，按 `recipeId` 去重，且必须在该点单里 |
+| `note` | 给掌勺人的留言，最多 50 字 |
+
+`menus` 新增 `cookId` / `cookName` / `planId` / `planTitle` / `draftMenuId` 来源，
+用于「掌勺人已保存 / 已锁定」标记与历史追溯；旧菜单没有这些字段时保持原行为。
+
+### menu 云函数 action
+
+| action | 说明 | 权限 |
+| --- | --- | --- |
+| `getMealBoard` | 返回本餐次方案、掌勺人已保存的点单、建议汇总、成员 | 家庭成员；不传 `mealType` 时取当天最近一份 |
+| `submitPreference` | 新增 / 更新自己的菜品建议 | 家庭成员；只能写自己；必须先有草稿点单；已锁定 / 已取代拒绝 |
+| `setMealCook` | 交接掌勺人 | 仅当前掌勺人；掌勺人已离群时管理员可兜底；目标必须是成员 |
+| `saveMenu` | 把推荐菜保存成本餐点单 | 仅当前掌勺人（离群时管理员兜底）；同一餐次复用同一份草稿 |
+| `confirmMenu` | 锁定最终菜单 | 仅当前掌勺人；**不校验家人是否都已提建议** |
+
+`confirmPlan` 已删除：选方案这一步合并进了 `saveMenu` + `confirmMenu`，
+避免同时存在两套「确认」入口。
+
+`confirmMenu` / `setMenuItemLocked` / `replaceMenuItem` / `regenerateUnlockedItems`
+新增掌勺人校验：带 `cookId` 的菜单只有掌勺人能改；没有 `cookId` 的旧菜单保持兼容。
+掌勺人交接后，旧草稿的权限以方案当前的 `cookId` 为准，确认时同步更新菜单上的掌勺人。
+
+### recommendMenus 变化
+
+- 本餐次已有有效方案时**直接复用**，不再重复调用 AI、不再各生成一套。
+- `force: true` 表示换一批：只有掌勺人可以发起；会先写入新方案、再把旧方案标记
+  `superseded`（写入失败时旧方案仍然有效，家人不会突然没有菜单）。
+- 已确认方案只有在 `force: true` **且** `confirmReplace: true` 时才允许替换。
+- 新方案使用新的文档 ID，旧偏好不会错误继承到一批全新的菜上。
+
+### 页面
+
+- **点菜 Tab**：「本餐点单」看板，含餐次切换、掌勺人、家人建议进度、菜品建议、
+  留言、掌勺人锁定 / 交接 / 换一批，以及锁定后的最终菜单与采购清单入口。
+  - 还没人发起：显示「发起推荐并掌勺」。
+  - 掌勺人还没保存点单：家人看到「掌勺人还在挑菜」。
+  - 已有草稿：家人点想吃 / 不想吃；掌勺人看到「谁想吃、谁不想吃」并可随时锁定。
+- **首页**：菜单卡片下方显示「掌勺人 + 家人已提建议 N/M」，点击进入点菜页。
+- **推荐结果页**：掌勺人挑菜后「保存点单」回到点菜页；也可直接「锁定菜单」。
+- **菜单详情页**：已锁定 / 已完成菜单显示「掌勺人 X」。
+
+### 用户需手动操作
+
+1. 云开发控制台创建集合：`menu_plans`、`meal_preferences`
+   （权限「仅创建者可读写」，所有读写经由云函数）。
+2. 按「索引创建清单」为两个集合建索引（#6–#9）。
+3. 重新部署 `recommend` 与 `menu` 云函数。
+4. 不创建集合也能上线：点菜页不会显示方案看板，原有推荐 / 点单流程不受影响。
+
+### 定时维护（cleanup 云函数）
+
+`cleanup` 每天凌晨 3:00（北京时间）执行，处理两类「停滞」数据：
+
+| 对象 | 条件 | 动作 | 原因 |
+| --- | --- | --- | --- |
+| `menu_plans` | `status=open` 且 48 小时没更新 | → `expired` | 这餐没人管了，不该继续占着「一顿餐只有一个人发起」的位置 |
+| `menus` | `status=confirmed` 且 48 小时没更新 | → `completed`（`completedBy=system`、`completionReason=auto_timeout`） | 开过火但没人点完成，自动收尾，家人才能进入评价 |
+
+- 只按时间推进状态，**不删除**仍在用的数据；`draft` / `completed` / `superseded` 一律不碰。
+- 方案作废后，同一餐次可以重新发起推荐，不会被旧方案挡住。
+- 自动完成不写 `snapshotItems`；评价侧 `resolveDishSnapshot` 会回落到当前菜品，不会断链。
+- 单次最多处理 500 条，重复执行幂等。
+- 原来「清理 6 个月前已确认菜单」的逻辑保留在这一步之后。
+
+### 存量点单一次性收尾
+
+份数点单功能已从产品中移除，不再产生新点单；但旧点单仍停在 `open`。
+删除只允许 `closed`，而 `closeOrder` 要求「全员提交份数」——这个前提再也无法满足，
+于是旧点单**既关不掉也删不掉**。
+
+处理方式是**只清理存量、不改变日常规则**：
+
+- 点菜页在检测到有 `open` 点单时显示「收尾进行中」按钮（仅管理员可见）；
+- 云函数 `order.cleanupOpenOrders` 把这些点单标为 `closed`，
+  用与 `closeOrder` 相同的口径写 `finalSummary`（共用 `buildFinalSummary`）；
+- 标记 `closedBy = 'system'`、`closeReason = 'legacy_cleanup'` 便于审计；
+- 关闭后即可按原有路径勾选删除。
+- 列表接口额外返回 `openTotal`，前端据此决定是否显示该入口
+  （本地只有当前页，算不全）。
+
+**注意**：`cleanup` 定时任务不处理点单，它只推进 `menu_plans` 与 `menus` 的状态。
+点单的收尾必须由管理员手动触发一次。
+
+### 已知限制
+
+- 同一餐次的生成任务通过 `menu_plans` 中的 `plan_lock` 文档做 best-effort 互斥
+  （固定 `_id = lock_家庭_日期_餐次`，3 分钟自动过期，被占用时返回 `PLAN_GENERATING`）；
+  集合缺失时会跳过加锁，极端情况下仍可能重复生成。
+- 「一顿餐只有一个发起人」依赖唯一有效方案：并发发起时后到的一方拿到锁失败或
+  读到已有方案，不会各自生成一套；但 `saveMenu` 的草稿复用不是事务，
+  极端并发下仍可能写入两份草稿（只会有一份被 `draftMenuId` 引用）。
+- 建议以「一位成员一条记录」为准，按草稿菜单的 `recipeId` 校验；
+  掌勺人换菜后，旧菜上的建议自动不再统计。
+- 日期发生在北京时间当天内；跨零点后视为新的一天。
+
+## 阶段二：饭后评价与掌勺人成长
+
+菜单确认 → 实际做饭与用餐 → 标记本餐已完成 → 家人逐道菜评价 →
+汇总有效评分 → 掌勺人获得成长积分 → 更新厨师等级。
+
+### 数据模型
+
+**`menus`（扩展现有文档，不新建集合）**
+
+| 字段 | 说明 |
+| --- | --- |
+| `menuVersion` | 菜单版本；方案确认时沿用 `planVersion`，兜底 1 |
+| `status` | 新增流转 `confirmed → completed` |
+| `completedAt` / `completedBy` | 完成时间与操作者 |
+| `snapshotItems` | 完成时固化的菜品快照 `[{recipeId, name, category, position}]` |
+
+`snapshotItems` 是评价对象的唯一依据：完成之后任何菜单改动（包括换菜、历史重推、
+甚至直接改库）都不会改变已经产生的评价归属。
+
+**`meal_reviews`（新增，每位成员每餐一条）**
+
+| 字段 | 说明 |
+| --- | --- |
+| `_id` | `rv_<menuId>_<userId>`，主键即「一人一餐一条」 |
+| `familyId` / `menuId` / `userId` | 归属关系；`userId` 只来自登录态 |
+| `ratings` | `[{recipeId, stars(1-5), comment(≤50)}]`，只含已评分菜品 |
+| `createdAt` / `updatedAt` | 首次提交与最近一次修改时间 |
+
+**`chef_points`（新增，掌勺人积分流水）**
+
+| 字段 | 说明 |
+| --- | --- |
+| `_id` | `pt_<menuId>_<type>`，主键即幂等键 |
+| `familyId` / `cookId` / `menuId` | 积分归属：家庭 + 掌勺人 + 用餐记录 |
+| `type` | `meal_complete`（完成本餐）/ `rating_bonus`（评分奖励） |
+| `points` / `reason` | 积分数值与可读原因 |
+| `avgStars` / `ratingCount` | 评分奖励结算时的平均值与评分人数（可追溯） |
+| `createdAt` | 写入时间 |
+
+累计积分**不做缓存字段**，一律由流水求和得出，因此余额与流水不可能不一致。
+
+### 积分规则（最终采用）
+
+| 项目 | 规则 |
+| --- | --- |
+| 基础积分 | 本餐首次成功标记完成：**+10 分** |
+| 评分奖励 | 本餐首次产生有效评分汇总时结算一次：`round(整体平均分 × 2)`，**上限 +10 分** |
+| 未评分 | 平均分为 `null` → 只拿基础分，**不按满分计算** |
+| 反复改分 | 评分奖励只有一笔流水（固定 `_id`），改分只更新 `meal_reviews` |
+
+整体平均分 = 该餐所有「菜 × 人」有效 1—5 星评分的算术平均。
+例：3 道菜都拿到 5 星 → 平均 5.0 → 奖励 10 分；只有一道菜 3 星 → 平均 3.0 → 奖励 6 分。
+
+选择「首次产生有效评分即结算一次」而不是「每次提交都结算」，是因为后者会让
+成员反复改分无限刷分；选「整体平均」而不是「按菜累加」，是因为按菜累加会让
+多菜大餐天然比少菜小餐拿分高得多，不利于长期公平。
+
+### 厨师等级（最终采用）
+
+| 等级 | 名称 | 累计积分门槛 |
+| --- | --- | ---: |
+| 1 | 初级厨师 | 0 |
+| 2 | 家常好手 | 50 |
+| 3 | 家庭大厨 | 150 |
+| 4 | 星级掌勺人 | 350 |
+| 5 | 米其林主厨 | 700 |
+
+等级由服务端按累计流水计算，前端传入的 `level` / `points` 一律忽略。
+「米其林主厨」仅为游戏化称号，不代表任何真实餐饮资质。
+按「每餐 10 分基础 + 最高 10 分奖励」估算，2 级约 3 餐、3 级约 8 餐、4 级约 18 餐、5 级约 35 餐。
+
+### 新增接口（均在 `menu` 云函数内）
+
+| action | 权限 | 说明 |
+| --- | --- | --- |
+| `completeMeal` | 家庭成员 | 仅 `confirmed` 可完成；条件更新保证只成功一次；固化快照；发基础分 |
+| `submitRatings` | 家庭成员 | 仅 `completed` 可评价；只能写自己的记录；按固定 `_id` 更新 |
+| `getMealReview` | 家庭成员 | 完成状态 + 评价汇总 + 掌勺人成长 + 规则 |
+| `getChefGrowth` | 家庭成员 | 本家庭内查自己或他人成长；跨家庭一律拒绝 |
+
+### 防重复实现
+
+| 风险 | 手段 |
+| --- | --- |
+| 重复标记完成 | `menus` 条件更新 `where({status:'confirmed'})`，只有一次 `updated > 0` |
+| 重复发放基础分 | 流水固定 `_id = pt_<menuId>_meal_complete`，先查后插 + 主键冲突视为已处理 |
+| 重复发放评分奖励 | 同上，`pt_<menuId>_rating_bonus` 只可能有一条 |
+| 修改评分产生多条记录 | 评价记录固定 `_id = rv_<menuId>_<userId>`，只有 update 不 insert |
+| 并发提交同一成员评分 | 插入冲突时回退为 update 已有记录 |
+| 前端伪造他人评分 | `userId` 只取 `getWXContext().OPENID` 对应的 `users._id` |
+| 菜单变更覆盖历史评价 | 评价对象来自 `snapshotItems`，不读当前 `items` |
+
+### 页面
+
+- **菜单详情页**（复用，不新增页面）：
+  已确认菜单显示「标记本餐已完成」；已完成显示完成时间与「饭后评价」；
+  评价区逐道菜 1—5 星 + 可选评语 + 该菜平均分 / 评分人数 / 他人评语；
+  顶部显示本餐掌勺人成长卡（等级、累计积分、升级进度、最近一次积分原因）。
+- **我的页**：家庭卡片下方新增厨师等级卡（等级、积分、进度条、距下一级、最近一次加分原因）。
+  未担任过掌勺人时显示「初级厨师 0 分」，不阻塞其他功能。
+- 不新增底部导航项，不新增独立评价页面。
+
+### 用户需手动操作
+
+1. 云开发控制台创建集合：`meal_reviews`、`chef_points`
+   （权限「仅创建者可读写」，所有读写经由云函数）。
+2. 按「索引创建清单」建索引 #10、#11。
+3. 重新部署 `menu` 云函数（本次只改动了 `menu`，`recommend` 未变）。
+4. 历史数据兼容：无需迁移。旧菜单没有 `menuVersion` / `snapshotItems` 时按 1 和当前菜品兜底，
+   首次对该菜单执行完成操作会自动补写快照。
+
+### 已知限制
+
+- 评分奖励是「一餐一次」结算，首个人评分后即定档；后续成员补评只更新汇总，
+  不再追加奖励。这是刻意的防刷分取舍（见上文规则说明）。
+- 掌勺人未指定（`cookId` 为空）的菜单不能标记完成，会提示先去点菜页指定掌勺人，
+  系统不会自行选人发分。
+- 退群成员的历史评价记录保留，但不再计入有效汇总。
+- 本阶段只记录评价数据，未接入 AI 推荐排序；`meal_reviews` 中的
+  `recipeId + 名称快照 + 用餐时间 + 掌勺人 + 评分人数 + 平均分` 已可作为后续排序的输入。
+
 ## 校验命令
 
 ```bash
 npm run typecheck          # TypeScript 严格类型检查（无输出即通过）
 npm run verify:family      # 家庭系统静态结构 + 云函数行为验证（181 项断言）
-npm run verify:ingredient  # 食材库存静态结构 + 云函数行为验证（155 项断言）
-npm run verify:nutrition   # 营养计算静态结构 + 云函数行为验证（212 项断言）
-npm run verify:recipe      # 基础菜谱库静态结构 + 云函数行为验证（170 项断言）
-npm run verify:history     # 历史菜单 / 历史点单静态结构 + 云函数行为验证（85 项断言）
-npm run verify:ai          # 统一 AI 服务静态结构 + 云函数行为验证（108 项断言）
+npm run verify:ingredient  # 食材库存静态结构 + 云函数行为验证（262 项断言）
+npm run verify:nutrition   # 营养计算静态结构 + 云函数行为验证（216 项断言）
+npm run verify:recipe      # 基础菜谱库静态结构 + 云函数行为验证（186 项断言）
+npm run verify:history     # 历史菜单 / 历史点单静态结构 + 云函数行为验证（112 项断言）
+npm run verify:ai          # 统一 AI 服务静态结构 + 云函数行为验证（112 项断言）
 npm run verify:cookbook     # 家庭菜谱库静态结构 + 云函数行为验证（91 项断言）
 npm run verify:diet         # 过敏原 / 忌口硬过滤静态结构与纯函数验证（94 项断言）
-npm run verify:shopping     # 采购清单静态结构 + 云函数行为验证（118 项断言）
+npm run verify:shopping     # 采购清单静态结构 + 云函数行为验证（122 项断言）
+npm run verify:meal-plan    # 餐次协作静态结构 + 云函数行为验证（123 项断言）
+npm run verify:review       # 饭后评价与掌勺人成长静态结构 + 云函数验证（152 项断言）
+npm run verify:voice        # 语音相关静态结构 + 云函数行为验证（35 项断言）
+npm run verify:chat         # AI 做饭机器人静态结构 + 云函数行为验证（33 项断言）
+npm run verify:recommend-chef      # 掌勺人推荐偏好静态结构 + 云函数验证（99 项断言）
+npm run verify:recommend-diversity # 推荐多样性静态结构 + 云函数验证（66 项断言）
+```
+
+跑全部套件（任一失败即中断）：
+
+```bash
+npx tsc --noEmit -p tsconfig.json && for f in tools/verify-*.js; do node "$f" || exit 1; done
 ```
 
 `verify:*` 用内存版 `wx-server-sdk`（`tools/mock-cloud.js`）驱动**真实的云函数代码**，不依赖云环境，
@@ -734,7 +1142,7 @@ npm run verify:shopping     # 采购清单静态结构 + 云函数行为验证�
 新增菜单后旧历史仍在 / 集合缺失降级 / 菜单详情家庭归属强制校验 /
 历史点单列表与详情 / 已关闭订单只读且幂等 / 汇总来自服务端（含昵称）/
 不暴露 openid / 不存在的点单返回 ORDER_NOT_FOUND 等场景。
-`verify:ai` 覆盖 4 份 client / ai-service 字节一致 / 内置通道 fail closed /
+`verify:ai` 覆盖 5 份 client / ai-service 字节一致 / 内置通道 fail closed /
 凭据不泄露 / 额度的原子性并发与北京日切 / 模式路由与默认值 /
 客户端传入任何字段都无法覆盖服务端构造的 aiConfig / 用量日志持久化与脱敏等场景。
 `verify:cookbook` 覆盖 family_cookbook 与 cookbook_versions 数据模型 /
@@ -747,6 +1155,16 @@ npm run verify:shopping     # 采购清单静态结构 + 云函数行为验证�
 shopping-core 纯函数（用量缩放/库存扣减/分类/KG 换算/勾选迁移）/
 生成/读取/勾选/刷新保留勾选 / 权限隔离与跨家庭防泄露 /
 集合缺失降级 / 入参校验 / 响应信封等场景。
+`verify:meal-plan`（Phase 1）覆盖 meal-plan-core 纯函数（北京日切 / 入参规范化 /
+偏好去重与退群成员过滤 / 方案转菜单快照）/ 看板读取 / 偏好权限与归属校验 /
+掌勺人交接 / 确认生成最终菜单 / 旧菜单 cookId 兼容 / 已确认方案复用与替换 /
+集合缺失降级等场景。
+`verify:review`（阶段二）覆盖 chef-core 纯函数（1—5 星边界 / 不默认补分 /
+同菜去重 / 快照固化 / 平均分与人数 / 无评分不除零 / 积分奖励与等级门槛）/
+标记本餐完成（未确认拒绝、越权拒绝、跨家庭拒绝、重复完成不重复加分、
+掌勺人未指定时拒绝、完成后禁止改菜）/ 逐道菜评分（未完成拒绝、越权拒绝、
+伪造 userId 无效、不属于本餐的菜拒绝、修改更新原记录、未评分不参与平均）/
+积分归属与防重复结算 / 家庭隔离 / 集合缺失降级 / 阶段一回归等场景。
 加 `-- --quiet` 可只看小节标题、失败项与总计。
 
 云函数改完后建议额外做一次纯语法检查：
@@ -766,6 +1184,8 @@ node --check cloudfunctions/recipe/ai-service.js
 node --check cloudfunctions/recommend/ai-service.js
 node --check cloudfunctions/recipe/seed-recipes.js
 node --check cloudfunctions/menu/index.js
+node --check cloudfunctions/menu/meal-plan-core.js
+node --check cloudfunctions/menu/chef-core.js
 node --check cloudfunctions/order/index.js
 ```
 

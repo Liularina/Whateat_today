@@ -313,7 +313,8 @@ async function runOrderHistoryTests() {
     menuId: 'menu-1',
     status: 'open',
     deadline: '2999-01-01T00:00:00.000Z',
-    createdAt: '2026-10-05T10:00:00.000Z',
+    // 用「刚刚创建」：未超时的点单仍要求全员点单才能关闭
+    createdAt: new Date().toISOString(),
   });
   pushOrder({
     _id: 'order-closed',
@@ -350,6 +351,10 @@ async function runOrderHistoryTests() {
 
   const closedOnly = await callOrder(USER_A.openid, 'listOrders', { familyId: FAMILY_A, status: 'closed' });
   checkEqual('按 closed 筛选返回 1 条', closedOnly.data.total, 1);
+
+  // openTotal 不受筛选影响：前端据此决定是否显示「收尾进行中」入口
+  checkEqual('全部筛选下返回进行中总数', all.data.openTotal, 1);
+  checkEqual('按已关闭筛选时仍返回进行中总数', closedOnly.data.openTotal, 1);
   checkEqual('筛选出已关闭点单', closedOnly.data.items[0].orderId, 'order-closed');
   check('列表包含 closedAt', closedOnly.data.items[0].closedAt === '2026-10-06T20:00:00.000Z');
 
@@ -397,6 +402,51 @@ async function runOrderHistoryTests() {
   const crossSummary = await callOrder(USER_C.openid, 'getOrderSummary', { orderId: 'order-closed' });
   checkEqual('外人读取汇总被拒', crossSummary.code, 'NOT_IN_FAMILY');
 
+  /* ---------- 全员点单才能关闭 ---------- */
+  // 新开一单：order-open 还没有任何人提交
+  let openClose = await callOrder(USER_A.openid, 'closeOrder', { orderId: 'order-open' });
+  checkEqual('无人点单时不能关闭', openClose.code, 'ORDER_NOT_ALL_COMPLETED');
+  check('提示里点名了还没点单的家人',
+    openClose.message.indexOf('小明') !== -1 || openClose.message.indexOf('小红') !== -1,
+    openClose.message);
+  checkEqual('关闭失败后订单仍是 open',
+    store.family_orders.find((o) => o._id === 'order-open').status, 'open');
+
+  // 只有一个人点完，仍然不能关闭
+  store.family_order_items.push({
+    _id: 'oi-open-a', orderId: 'order-open', familyId: FAMILY_A, userId: USER_A._id,
+    items: [{ recipeId: 'r-1', quantity: 1, note: '' }],
+    createdAt: '2026-10-05T11:00:00.000Z', updatedAt: '2026-10-05T11:00:00.000Z',
+  });
+  openClose = await callOrder(USER_A.openid, 'closeOrder', { orderId: 'order-open' });
+  checkEqual('只完成一个人时仍不能关闭', openClose.code, 'ORDER_NOT_ALL_COMPLETED');
+  check('提示里指出剩余成员', openClose.message.indexOf('小红') !== -1, openClose.message);
+
+  // 第二个人也点完（即使全 0 份也算完成）就能关闭
+  store.family_order_items.push({
+    _id: 'oi-open-b', orderId: 'order-open', familyId: FAMILY_A, userId: USER_B._id,
+    items: [],
+    createdAt: '2026-10-05T12:00:00.000Z', updatedAt: '2026-10-05T12:00:00.000Z',
+  });
+  openClose = await callOrder(USER_A.openid, 'closeOrder', { orderId: 'order-open' });
+  checkEqual('全员点完后可以关闭', openClose.success, true);
+  checkEqual('关闭后订单状态为 closed',
+    store.family_orders.find((o) => o._id === 'order-open').status, 'closed');
+
+  /* ---------- 超时点单：等不到人也能关闭，否则永远删不掉 ---------- */
+  // 新流程已无「提交份数」入口，历史 open 点单若还要求全员点单，就会永久卡死。
+  pushOrder({
+    _id: 'order-stale',
+    menuId: 'menu-1',
+    status: 'open',
+    deadline: '2999-01-01T00:00:00.000Z',
+    createdAt: new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString(),
+  });
+  const staleClose = await callOrder(USER_A.openid, 'closeOrder', { orderId: 'order-stale' });
+  check('超过 48 小时的点单无需全员点单即可关闭', staleClose.success === true, staleClose.message);
+  checkEqual('超时点单已关闭',
+    store.family_orders.find((o) => o._id === 'order-stale').status, 'closed');
+
   /* ---------- 已关闭订单保持只读：重复关闭是幂等的，不会重开或改写历史 ---------- */
   const closedBefore = clone(store.family_orders.find((o) => o._id === 'order-closed'));
   const reclose = await callOrder(USER_A.openid, 'closeOrder', { orderId: 'order-closed' });
@@ -405,6 +455,66 @@ async function runOrderHistoryTests() {
   const closedAfter = store.family_orders.find((o) => o._id === 'order-closed');
   check('重复关闭没有改写订单', JSON.stringify(closedBefore) === JSON.stringify(closedAfter));
   checkEqual('订单状态仍为 closed（未被重新打开）', closedAfter.status, 'closed');
+
+  /* ---------- 存量清理：一次性关闭卡住的 open 点单 ---------- */
+  // 份数点单功能已移除，旧 open 点单永远等不到「全员提交」，必须能批量收尾。
+  pushOrder({
+    _id: 'order-legacy-1',
+    menuId: 'menu-1',
+    status: 'open',
+    createdAt: '2026-10-05T10:00:00.000Z',
+  });
+  pushOrder({
+    _id: 'order-legacy-2',
+    menuId: 'menu-1',
+    status: 'open',
+    createdAt: '2026-10-05T11:00:00.000Z',
+  });
+  store.family_order_items.push({
+    _id: 'oi-legacy-1', orderId: 'order-legacy-1', familyId: FAMILY_A, userId: USER_A._id,
+    items: [{ recipeId: 'r-1', quantity: 2, note: '' }],
+    createdAt: '2026-10-05T10:05:00.000Z', updatedAt: '2026-10-05T10:05:00.000Z',
+  });
+
+  const forbiddenCleanup = await callOrder(USER_B.openid, 'cleanupOpenOrders', { familyId: FAMILY_A });
+  checkEqual('普通成员不能触发存量清理', forbiddenCleanup.code, 'FORBIDDEN');
+
+  const cleanup = await callOrder(USER_A.openid, 'cleanupOpenOrders', { familyId: FAMILY_A });
+  check('管理员触发存量清理成功', cleanup.success === true, cleanup.message);
+
+  const legacy1 = store.family_orders.find((o) => o._id === 'order-legacy-1');
+  const legacy2 = store.family_orders.find((o) => o._id === 'order-legacy-2');
+  checkEqual('存量点单 1 已关闭', legacy1.status, 'closed');
+  checkEqual('存量点单 2 已关闭', legacy2.status, 'closed');
+  checkEqual('标记为系统关闭', legacy1.closedBy, 'system');
+  checkEqual('记录清理原因', legacy1.closeReason, 'legacy_cleanup');
+  check('写入关闭时间', !!legacy1.closedAt);
+  checkEqual('汇总沿用 closeOrder 口径：2 份',
+    legacy1.finalSummary[0].totalQuantity, 2);
+  checkEqual('汇总记录人数', legacy1.finalSummary[0].peopleCount, 1);
+  checkEqual('无明细的点单汇总为空', (legacy2.finalSummary || []).length, 0);
+
+  // 幂等：再跑一次不再处理已关闭的点单
+  const cleanupAgain = await callOrder(USER_A.openid, 'cleanupOpenOrders', { familyId: FAMILY_A });
+  checkEqual('重复清理关闭 0 条', cleanupAgain.data.closedCount, 0);
+
+  // 清理只影响本家庭：FAMILY_B 的点单在 A 家清理后仍应是 open
+  const otherFamilyOrder = store.family_orders.find((o) => o._id === 'order-other');
+  checkEqual('其他家庭点单未被误改', otherFamilyOrder.status, 'open');
+
+  // 各家庭管理员只能清理自己的家庭
+  const otherFamilyCleanup = await callOrder(USER_C.openid, 'cleanupOpenOrders', { familyId: FAMILY_B });
+  check('管理员可以清理自己家庭', otherFamilyCleanup.success === true, otherFamilyCleanup.message);
+  checkEqual('B 家点单被 B 家管理员关闭',
+    store.family_orders.find((o) => o._id === 'order-other').status, 'closed');
+
+  // 已关闭的点单现在可以正常删除（这正是清理的目的）
+  const delAfter = await callOrder(USER_A.openid, 'deleteOrders', {
+    familyId: FAMILY_A, orderIds: ['order-legacy-1'],
+  });
+  check('清理后可正常删除', delAfter.success === true, delAfter.message);
+  checkEqual('点单已从库中移除',
+    store.family_orders.some((o) => o._id === 'order-legacy-1'), false);
 }
 
 /* ============================== 主流程 ============================== */

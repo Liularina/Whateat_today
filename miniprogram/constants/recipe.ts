@@ -10,7 +10,14 @@
 export const RECIPE_CATEGORY_ALL = '全部';
 
 /** 菜谱分类；数组顺序即筛选条顺序 */
-export const RECIPE_CATEGORIES: readonly string[] = ['家常菜', '蔬菜类', '汤类', '主食类'];
+export const RECIPE_CATEGORIES: readonly string[] = [
+  '家常菜',
+  '蔬菜类',
+  '汤类',
+  '主食类',
+  '儿童餐',
+  '减肥餐',
+];
 
 /** 列表页默认每页条数 */
 export const RECIPE_PAGE_SIZE = 20;

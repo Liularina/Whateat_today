@@ -2,7 +2,6 @@ import { DIFFICULTY_LABELS } from '../../constants/config';
 import type { RecommendMenusResult, RecommendMenuView, RecommendRecipeView, SavedMenuItem } from '../../types/ai-config';
 import { ingredientService } from '../../services/ingredient';
 import { menuService } from '../../services/menu';
-import { orderService } from '../../services/order';
 import { getErrorCode, getErrorMessage } from '../../utils/cloud';
 
 interface DishViewModel {
@@ -82,6 +81,12 @@ Page({
     servings: 0,
     menuCount: 0,
     menus: [] as MenuViewModel[],
+    /** 当前用户是否本餐次掌勺人：非掌勺人只能查看方案 */
+    isCook: true,
+    cookName: '',
+    /** 本餐次方案状态：confirmed 时不再允许重新选择 */
+    planStatus: 'open' as 'open' | 'confirmed',
+    confirmedMenuId: '',
 
     /* ---- 交互模式 ---- */
     menuId: '',
@@ -89,6 +94,8 @@ Page({
     interactiveTitle: '',
     interactiveDishes: [] as DishViewModel[],
     totalCookTime: '',
+    /** 本次连续换菜试过的菜，服务端用来排除重复 */
+    triedRecipeIds: [] as string[],
 
     /* ---- 加载与错误 ---- */
     loading: false,
@@ -117,11 +124,19 @@ Page({
       breakfast: '早餐', lunch: '午餐', dinner: '晚餐', midnight_snack: '夜宵',
     };
 
+    // 本餐次掌勺人：方案文档记录了 cookId；旧结果没有 cookId 时保持兼容（视为可操作）
+    const currentUserId = (app.globalData.user && app.globalData.user._id) || '';
+    const isCook = !result.cookId || !currentUserId || result.cookId === currentUserId;
+
     this.setData({
       mealTypeLabel: mealLabels[result.mealType] || result.mealType,
       servings: result.servings,
       menuCount: result.menus.length,
       menus: result.menus.map(toMenuView),
+      isCook: isCook,
+      cookName: result.cookName || '',
+      planStatus: result.planStatus === 'confirmed' ? 'confirmed' : 'open',
+      confirmedMenuId: result.menuId || '',
     });
   },
 
@@ -181,6 +196,11 @@ Page({
   /* ============================== 选择菜单 → 保存 → 进入交互 ============================== */
 
   async onSelectMenu(e: WechatMiniprogram.TouchEvent) {
+    if (!this.data.isCook) {
+      wx.showToast({ title: '只有本餐次掌勺人可以确认菜单', icon: 'none' });
+      return;
+    }
+
     const index = Number(e.currentTarget.dataset.index);
     if (isNaN(index)) return;
 
@@ -208,6 +228,7 @@ Page({
         mealType: result.mealType,
         servings: result.servings,
         items: menu.items,
+        planTitle: menu.title,
       });
 
       this.setData({
@@ -279,15 +300,21 @@ Page({
     this.setData({ loading: true });
 
     try {
+      // 带上本次已经换过又被否掉的菜，服务端据此排除，避免连点拿到同一道
+      const tried = (this.data.triedRecipeIds || []).concat([recipeId]);
       const result = await menuService.replaceMenuItem(
-        this.data.menuId, recipeId, this.data.familyId,
+        this.data.menuId, recipeId, this.data.familyId, undefined, tried,
       );
 
       // 替换 UI 中的对应菜品
       const dishes = this.data.interactiveDishes.map((d) =>
         d.recipeId === recipeId ? toDishView(result.newItem) : d,
       );
-      this.setData({ loading: false, interactiveDishes: dishes });
+      this.setData({
+        loading: false,
+        interactiveDishes: dishes,
+        triedRecipeIds: tried.concat([result.newItem.recipeId]),
+      });
 
       wx.showToast({ title: '已更换为「' + result.newItem.name + '」', icon: 'success' });
     } catch (error) {
@@ -379,29 +406,18 @@ Page({
     }
   },
 
-  /* ============================== Phase 9：发起点单 ============================== */
+  /* ============================== 回到点菜页 ============================== */
 
-  async onStartOrder() {
-    if (!this.data.menuId || !this.data.familyId) {
-      wx.showToast({ title: '缺少菜单或家庭信息', icon: 'none' });
-      return;
-    }
-
-    this.setData({ loading: true });
-
-    try {
-      const result = await orderService.createOrder(this.data.familyId, {
-        menuId: this.data.menuId,
-      });
-
-      this.setData({ loading: false });
-
-      wx.showToast({ title: '点单已创建', icon: 'success' });
-      wx.navigateTo({ url: '/pages/order-detail/index?orderId=' + result._id });
-    } catch (error) {
-      this.setData({ loading: false });
-      wx.showToast({ title: getErrorMessage(error, '创建失败'), icon: 'none' });
-    }
+  /**
+   * 点单已保存，回点菜页让家人提建议。
+   *
+   * 不在这一页等建议：掌勺人挑完菜就该离开，
+   * 家人是否表态、什么时候表态，由点菜页实时展示。
+   */
+  onBackToBoard() {
+    wx.navigateBack({
+      fail: () => wx.redirectTo({ url: '/pages/order/index' }),
+    });
   },
 
   /* ============================== 导航 ============================== */
@@ -410,6 +426,15 @@ Page({
     wx.navigateBack({
       fail: () => wx.redirectTo({ url: '/pages/recommend/index' }),
     });
+  },
+
+  /** 已确认菜单：直接进入最终菜单 */
+  onOpenConfirmedMenu() {
+    if (!this.data.confirmedMenuId) {
+      wx.showToast({ title: '请到点菜页查看最终菜单', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: '/pages/menu-detail/index?menuId=' + this.data.confirmedMenuId });
   },
 
   onOpenRecipe(e: WechatMiniprogram.TouchEvent) {

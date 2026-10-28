@@ -1,6 +1,8 @@
 import { APP_NAME, APP_VERSION, CURRENT_ENV, DEFAULT_NICKNAME } from '../../constants/config';
+import { reviewService } from '../../services/review';
 import type { FamilyState } from '../../types/family';
 import type { AuthState } from '../../types/user';
+import type { ChefGrowth } from '../../types/review';
 
 /** cloud:// 转成可显示 HTTPS URL */
 function toDisplayUrl(url: string): Promise<string> {
@@ -35,6 +37,12 @@ Page({
     familyName: '',
     memberCount: 0,
    familyError: '',
+
+    /** 阶段二：厨师等级与成长（掌勺人积分） */
+    growth: null as ChefGrowth | null,
+    growthProgress: 0,
+    growthNextLabel: '',
+    growthLastLabel: '',
   },
 
   /** 取消登录态订阅的闭包，页面卸载时释放 */
@@ -66,6 +74,40 @@ Page({
     // 家庭页返回后刷新，保证成员数与名称是最新的
     if (app.globalData.isLoggedIn) {
       void app.refreshFamily();
+    }
+    void this.loadGrowth();
+  },
+
+  /** 阶段二：读取当前家庭下的厨师等级与累计积分 */
+  async loadGrowth() {
+    const app = getApp<IAppOption>();
+    const family = app.globalData.family;
+    if (!family) {
+      this.setData({ growth: null, growthProgress: 0, growthNextLabel: '', growthLastLabel: '' });
+      return;
+    }
+
+    try {
+      const result = await reviewService.getChefGrowth(family._id);
+      const growth = result.growth;
+      const span = growth.maxLevel ? 0 : growth.nextMinPoints - growth.levelMinPoints;
+      const ratio = growth.maxLevel || span <= 0
+        ? 1
+        : (growth.points - growth.levelMinPoints) / span;
+
+      this.setData({
+        growth: growth,
+        growthProgress: Math.max(0, Math.min(100, Math.round(ratio * 100))),
+        growthNextLabel: growth.maxLevel
+          ? '已达到最高等级'
+          : '距 ' + growth.nextLevelName + ' 还差 ' + growth.pointsToNext + ' 分',
+        growthLastLabel: growth.lastReason
+          ? growth.lastReason + ' +' + growth.lastPoints
+          : '',
+      });
+    } catch (_e) {
+      // 成长数据只做展示，未创建集合或未担任过掌勺人时静默降级
+      this.setData({ growth: null, growthProgress: 0, growthNextLabel: '', growthLastLabel: '' });
     }
   },
 

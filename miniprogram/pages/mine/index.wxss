@@ -108,3 +108,49 @@
   --td-cell-description-color: var(--wte-text-weak);
 }
 
+
+/* 阶段二：厨师等级与成长 */
+.growth__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.growth__level {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #b9762f;
+}
+
+.growth__points {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ff7a45;
+}
+
+.growth__bar {
+  margin-top: 18rpx;
+  height: 12rpx;
+  border-radius: 999rpx;
+  background: #ffe6cd;
+  overflow: hidden;
+}
+
+.growth__bar-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #ffb066, #ff7a45);
+}
+
+.growth__next {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #a08a76;
+}
+
+.growth__last {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #c2947a;
+}

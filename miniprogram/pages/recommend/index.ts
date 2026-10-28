@@ -35,13 +35,29 @@ Page({
     recommending: false,
   },
 
-  onLoad() {
-    this.setData({ mealType: inferMealTypeByHour() });
+  onLoad(options: Record<string, string | undefined>) {
+    const mealType = options.mealType as MealType | undefined;
+    const validMeal = !!mealType && ['breakfast', 'lunch', 'dinner', 'midnight_snack'].indexOf(mealType) !== -1;
+    this.setData({ mealType: validMeal ? (mealType as MealType) : inferMealTypeByHour() });
+
+    // 从点菜页「换一批 / 为今天推荐」进入：自动发起一次，force 只生效一次
+    this._autoStart = options.auto === '1';
+    this._forceOnce = options.force === '1';
+    this._confirmReplaceOnce = options.replace === '1';
   },
+
+  _autoStart: false,
+  _forceOnce: false,
+  _confirmReplaceOnce: false,
 
   onShow() {
     // 从设置页返回后刷新 AI 配置状态
-    void this.checkAiConfig();
+    void this.checkAiConfig().then(() => {
+      if (this._autoStart) {
+        this._autoStart = false;
+        void this.onStartRecommend();
+      }
+    });
   },
 
   async checkAiConfig() {
@@ -123,11 +139,18 @@ Page({
     this.setData({ recommending: true });
 
     try {
+      const force = this._forceOnce;
+      const confirmReplace = this._confirmReplaceOnce;
+      this._forceOnce = false;
+      this._confirmReplaceOnce = false;
+
       const result = await recommendService.recommendMenus({
         familyId: family._id,
         mealType: this.data.mealType,
         servings: this.data.peopleCount,
         preferences: preferences || undefined,
+        force: force || undefined,
+        confirmReplace: confirmReplace || undefined,
       });
 
       this.setData({ recommending: false });
@@ -135,6 +158,10 @@ Page({
       // 带上完整结果跳转结果页
       const app2 = getApp<IAppOption>();
       app2.globalData.lastRecommendResult = result;
+
+      if (result.reused) {
+        wx.showToast({ title: '已载入本餐次方案', icon: 'none' });
+      }
 
       wx.navigateTo({ url: '/pages/recommend-result/index' });
     } catch (error) {

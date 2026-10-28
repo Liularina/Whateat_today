@@ -17,7 +17,10 @@
     "verify:voice": "node tools/verify-voice.js",
     "verify:chat": "node tools/verify-chat.js",
     "verify:recommend-diversity": "node tools/verify-recommend-diversity.js",
-    "e2e:nutrition": "node tools/e2e-nutrition.js"
+    "verify:meal-plan": "node tools/verify-meal-plan.js",
+    "verify:review": "node tools/verify-review.js",
+    "e2e:nutrition": "node tools/e2e-nutrition.js",
+    "verify:recommend-chef": "node tools/verify-recommend-chef.js"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.17.0"

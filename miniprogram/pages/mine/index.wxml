@@ -33,6 +33,20 @@
 
   <view class="family-error" wx:if="{{familyError}}">{{familyError}}</view>
 
+  <!-- 阶段二：厨师等级与成长 -->
+  <view class="card growth" wx:if="{{isInFamily && growth}}">
+    <view class="growth__head">
+      <view class="growth__level">{{growth.levelName}}</view>
+      <view class="growth__points">{{growth.points}} 分</view>
+    </view>
+    <view class="card__desc">厨师等级按累计积分计算，完成本餐与获得好评都会加分。</view>
+    <view class="growth__bar">
+      <view class="growth__bar-fill" style="width: {{growthProgress}}%"></view>
+    </view>
+    <view class="growth__next">{{growthNextLabel}}</view>
+    <view class="growth__last" wx:if="{{growthLastLabel}}">最近一次：{{growthLastLabel}}</view>
+  </view>
+
   <view class="cells">
     <t-cell-group theme="card">
       <t-cell title="历史菜单" description="回看过去确认过的菜单与做法" arrow bind:click="onGoHistoryMenu" />

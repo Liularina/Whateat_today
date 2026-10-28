@@ -105,7 +105,8 @@ function simulateRecommend(messages) {
 function simulatePick(messages) {
   const candidates = extractCandidates(userContentOf(messages));
   const system = systemContentOf(messages);
-  const matched = system.match(/选择\s*(\d+)\s*道菜/);
+  // 兼容两种提示词写法：「选择 N 道菜」与「换成 N 道真正不同的菜」
+  const matched = system.match(/(?:选择|换成)\s*(\d+)\s*道/);
   const count = matched ? Number(matched[1]) : 1;
   return JSON.stringify({ selectedIds: candidates.slice(0, count).map((c) => c.id) });
 }
@@ -228,6 +229,8 @@ async function recommend(requestId) {
     mealType: 'dinner',
     servings: 3,
     requestId: requestId,
+    // Phase 1：同餐次默认复用共享方案；本测试关注每次都真实生成时的多样性与提示词
+    force: true,
   });
 }
 
@@ -250,17 +253,20 @@ async function runPromptTests() {
   const system = systemContentOf(recommendCalls[0].messages);
   const user = userContentOf(recommendCalls[0].messages);
 
-  check('系统提示词包含多样性规则', system.indexOf('【多样性要求】') !== -1);
-  check('系统提示词明确不要默认番茄炒蛋', system.indexOf('不要默认推荐番茄炒蛋') !== -1);
-  check('系统提示词要求比较主要食材与烹饪方式', system.indexOf('主要食材和烹饪方式') !== -1);
-  check('系统提示词声明番茄鸡蛋仍可推荐', system.indexOf('番茄和鸡蛋是正常食材') !== -1);
+  check('系统提示词包含多菜系大厨角色', system.indexOf('菜系') !== -1 && system.indexOf('大厨') !== -1);
+  check('系统提示词包含强去重规则', system.indexOf('【第三层：强力去重') !== -1);
+  check('系统提示词要求比较主要食材与烹饪方式', system.indexOf('主要蛋白质 + 烹饪方式') !== -1);
+  check('系统提示词允许跳出菜谱库', system.indexOf('【第二层：库存不够就跳出菜谱库】') !== -1);
+  check('系统提示词声明番茄鸡蛋仍可推荐', system.indexOf('番茄炒蛋 / 西红柿炒鸡蛋') !== -1);
+  check('系统提示词要求换汤不换药不算换菜', system.indexOf('换汤不换药') !== -1);
+  check('系统提示词保留过敏原硬约束', system.indexOf('硬红线') !== -1);
   check('用户提示词包含最近 7 天菜单', user.indexOf('最近 7 天菜单') !== -1);
   check('用户提示词包含 recentlyUsed 说明', user.indexOf('recentlyUsed=true') !== -1);
   check('库存数量进入提示词', user.indexOf('番茄（3份）') !== -1);
   check('临期食材进入提示词', user.indexOf('临期食材') !== -1 && user.indexOf('临期食材（3 天内到期，可优先使用，但不得虚构）：番茄') !== -1);
 
   const candidates = extractCandidates(user);
-  check('提示词候选数量为 40', candidates.length === 40, 'actual=' + candidates.length);
+  check('提示词候选数量为 60', candidates.length === 60, 'actual=' + candidates.length);
   check('候选包含 recentlyUsed 字段',
     candidates.every((c) => typeof c.recentlyUsed === 'boolean'));
 
@@ -374,13 +380,24 @@ async function runTomatoAllowedTests() {
   store.menus.length = 0;
   setInventory(['番茄', '鸡蛋', '小葱', '食用油', '食盐']);
 
+  // 候选池按请求轮转采样（这正是避免「每次都是那几道菜」的机制），
+  // 因此单次请求看不到某道菜属于正常，需要多采样几次才能验证「没有被屏蔽」。
   recommendCalls = [];
-  const res = await recommend('tomato-allowed');
-  const candidates = extractCandidates(userContentOf(recommendCalls[0].messages));
-  const names = candidates.map((c) => c.name);
+  let res = null;
+  const seen = new Set();
+  for (let i = 0; i < 8; i++) {
+    store.menu_plans.length = 0;
+    res = await recommend('tomato-allowed-' + i);
+    const candidates = extractCandidates(userContentOf(recommendCalls[recommendCalls.length - 1].messages));
+    candidates.forEach((c) => seen.add(c.name));
+  }
+  const names = Array.from(seen);
 
-  check('候选池仍保留番茄炒蛋', names.indexOf('番茄炒蛋') !== -1);
+  check('多次采样后番茄炒蛋出现在候选里（未被屏蔽）', names.indexOf('番茄炒蛋') !== -1,
+    '样本数=' + names.length);
   check('候选池仍保留其他鸡蛋菜', names.some((n) => /蛋/.test(n)));
+  check('单次候选不会塞入全部菜谱（说明确有轮转采样）', names.length > 60,
+    '累计候选=' + names.length);
   check('推荐成功且返回菜单', res.success === true && (res.data.menus || []).length > 0);
 }
 
@@ -488,8 +505,11 @@ async function runMenuRegenerateTests() {
   check('5 次重新生成出现至少 4 种组合', signatures.length >= 4, 'distinct=' + signatures.length);
 
   const system = systemContentOf(menuCalls[0].messages);
-  check('换菜提示词包含多样性规则', system.indexOf('不要默认选择番茄炒蛋') !== -1);
+  check('换菜提示词说明要换掉哪些菜', system.indexOf('【要换掉的菜】') !== -1);
+  check('换菜提示词要求换汤不换药不算换菜', system.indexOf('换汤不换药') !== -1);
+  check('换菜提示词禁止同主料同做法', system.indexOf('同主料同做法') !== -1);
   check('换菜提示词包含近期菜单提示', system.indexOf('近期菜单') !== -1);
+  check('换菜提示词保留过敏原硬约束', system.indexOf('硬红线') !== -1);
 }
 
 /* ============================== 主流程 ============================== */

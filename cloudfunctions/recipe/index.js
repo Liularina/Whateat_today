@@ -256,7 +256,7 @@ async function listRecipes(event) {
   const { category, keyword, ingredient, page, pageSize } = parsed.value;
 
   // 按食材搜索需要匹配 ingredients 数组内字段，云数据库对数组内对象的点号正则支持不稳，
-  // 内置菜谱规模有限（当前 150 道），一次读回后内存过滤即可，结果与分页逻辑保持一致。
+  // 内置菜谱规模有限（当前 200 道），一次读回后内存过滤即可，结果与分页逻辑保持一致。
   if (ingredient) {
     return listRecipesByIngredient({ category, keyword, ingredient, page, pageSize });
   }

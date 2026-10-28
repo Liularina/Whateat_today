@@ -268,7 +268,7 @@ function runStructureChecks() {
     '列表使用 ingredient-item 组件并接上编辑 / 删除事件',
     pageWxml.indexOf('ingredient-item') !== -1 &&
       pageWxml.indexOf('bind:edit=') !== -1 &&
-      pageWxml.indexOf('bind:delete=') !== -1,
+      (pageWxml.indexOf('bind:delete=') !== -1 || pageWxml.indexOf('bind:remove=') !== -1),
   );
   check('页面提供添加食材入口', pageWxml.indexOf('onOpenCreate') !== -1);
   check(
@@ -1153,6 +1153,44 @@ async function runBehaviorTests() {
       },
     });
     checkEqual('清空保质字段后到期日为空', cleared.data.expireDate, null);
+
+    /* ---------- 用完但保留：数量允许归零，新增仍要求 > 0 ---------- */
+    const zeroed = await callIngredient(a.openidA, 'updateIngredient', {
+      familyId: a.familyId,
+      id: created.data._id,
+      input: {
+        name: '牛奶',
+        quantity: 0,
+        unit: '盒',
+        category: 'dairy',
+        remark: '用完了，待补货',
+      },
+    });
+    checkEqual('修改时可以把数量改为 0（保留条目）', zeroed.success, true);
+    checkEqual('数量归零后仍能读到这条食材', zeroed.data.quantity, 0);
+    checkEqual('归零时备注保留', zeroed.data.remark, '用完了，待补货');
+
+    const stillListed = await callIngredient(a.openidA, 'listIngredients', {
+      familyId: a.familyId,
+    });
+    const listedItems = Array.isArray(stillListed.data) ? stillListed.data : [];
+    check(
+      '归零的食材仍留在列表里',
+      listedItems.some((item) => item._id === created.data._id),
+    );
+
+    const badCreate = await callIngredient(a.openidA, 'createIngredient', {
+      familyId: a.familyId,
+      input: { name: '酸奶', quantity: 0, unit: '盒', category: 'dairy' },
+    });
+    checkEqual('新增食材仍然要求数量 > 0', badCreate.code, 'INVALID_PARAMS');
+
+    const negative = await callIngredient(a.openidA, 'updateIngredient', {
+      familyId: a.familyId,
+      id: created.data._id,
+      input: { name: '牛奶', quantity: -1, unit: '盒', category: 'dairy' },
+    });
+    checkEqual('修改不允许负数', negative.code, 'INVALID_PARAMS');
   }
 
   /* ---------- Phase B：前端纯函数（临期计算 + 分类分组） ---------- */
@@ -1242,16 +1280,25 @@ async function runBehaviorTests() {
       checkEqual('分组数量 = 3（蔬菜/肉蛋/其他）', groups.length, 3);
       checkEqual('分组顺序第 1 个是蔬菜', groups[0].code, 'vegetable');
       checkEqual('未知分类归入其他', groups[2].code, 'other');
+      checkEqual('默认全部折叠', groups.every((g) => g.collapsed === true), true);
       checkEqual('蔬菜组含 2 项', groups[0].count, 2);
       checkEqual('蔬菜组临期+过期计数 = 1', groups[0].warningCount, 1);
-      checkEqual('临期组在组内排最前', groups[0].items[0]._id, 'g2');
-      checkEqual('过期项被标记', groups[0].items[0].isExpired, true);
+      // 组内按剩余数量从多到少：番茄 3 个在菠菜 1 袋之前
+      checkEqual('组内按数量倒序：数量多的排前面', groups[0].items[0]._id, 'g1');
+      checkEqual('数量少的过期项排在后面', groups[0].items[1]._id, 'g2');
+      checkEqual('过期项仍被标记', groups[0].items[1].isExpired, true);
+      check(
+        '数量倒序成立',
+        groups[0].items[0].quantity >= groups[0].items[1].quantity,
+      );
       checkEqual('其他组含 1 项', groups[2].count, 1);
       checkEqual('其他组 1 天内到期 → 临期', groups[2].items[0].isWarning, true);
 
       const collapsed = group.buildCategoryGroups(sample, { vegetable: true }, today);
       checkEqual('折叠状态透传到分组', collapsed[0].collapsed, true);
-      checkEqual('未指定分类默认展开', collapsed[1].collapsed, false);
+      checkEqual('未指定分类默认折叠', collapsed[1].collapsed, true);
+      const expanded = group.buildCategoryGroups(sample, { vegetable: false }, today);
+      checkEqual('显式 false 表示展开', expanded[0].collapsed, false);
 
       const view = group.toIngredientView(sample[0], today);
       checkEqual('别名文案带原始名', view.aliasText, '（西红柿）');

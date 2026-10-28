@@ -5,6 +5,7 @@ import type { Menu } from '../../types/menu';
 import type { Ingredient } from '../../types/ingredient';
 import { menuService } from '../../services/menu';
 import { ingredientService } from '../../services/ingredient';
+import { mealPlanService } from '../../services/meal-plan';
 import { getShelfLifeStatus } from '../../utils/shelf-life';
 import { getErrorMessage } from '../../utils/cloud';
 
@@ -57,6 +58,8 @@ Page({
     isInFamily: false,
     familyName: '',
     familyId: '',
+    /** 家庭成员数（FamilyDTO 已提供，首页直接展示） */
+    memberCount: 0,
     familyError: '',
 
     /* 今日菜单 */
@@ -73,6 +76,20 @@ Page({
 
     /** 换菜进行中，防止重复点击 */
     swapping: false,
+    /** 本次连续换菜试过的菜：避免连点几次拿到同一道 */
+    triedRecipeIds: [] as string[],
+
+    /** 草稿态点「锁定并查看做法」时，锁定请求进行中 */
+    confirming: false,
+
+    /* 本餐次协作状态（Phase 1） */
+    boardCookName: '',
+    boardParticipant: 0,
+    boardMemberCount: 0,
+    /** 「家人已选」/「家人已点单」的文案前缀 */
+    boardProgressLabel: '',
+    boardStatus: '' as '' | 'open' | 'confirmed',
+    boardPlanId: '',
 
     /* 冰箱提醒 */
     fridge: null as FridgeSnapshot | null,
@@ -144,6 +161,7 @@ Page({
       familyReady: state.ready,
       isInFamily: state.isInFamily,
       familyName: state.family ? state.family.name : '',
+      memberCount: state.family ? (state.family.memberCount || 0) : 0,
       familyId,
       familyError: state.error,
     });
@@ -157,6 +175,42 @@ Page({
     if (!fid) return;
     void this.loadMenu(fid);
     void this.loadFridge(fid);
+    void this.loadBoard(fid);
+  },
+
+  /**
+   * 本餐次协作状态：掌勺人 + 家人提建议进度（不阻塞主流程）。
+   *
+   * 一顿餐只有一个发起人（即掌勺人）；菜单锁定后不再统计进度。
+   */
+  async loadBoard(familyId: string) {
+    const empty = {
+      boardCookName: '',
+      boardParticipant: 0,
+      boardMemberCount: 0,
+      boardStatus: '' as '' | 'open' | 'confirmed',
+      boardPlanId: '',
+      boardProgressLabel: '',
+    };
+    try {
+      const board = await mealPlanService.getBoard(familyId);
+      if (!board.available || !board.plan) {
+        this.setData(empty);
+        return;
+      }
+
+      this.setData({
+        boardCookName: board.plan.cookName || '',
+        boardParticipant: board.summary ? board.summary.participantCount : 0,
+        boardMemberCount: board.summary ? board.summary.memberCount : 0,
+        boardStatus: board.plan.status,
+        boardPlanId: board.plan.planId,
+        boardProgressLabel: '家人已提建议',
+      });
+    } catch (_e) {
+      // 协作状态只是辅助信息，失败不影响首页
+      this.setData(empty);
+    }
   },
 
   /* ---- 今日菜单 ---- */
@@ -291,7 +345,16 @@ Page({
 
     this.setData({ swapping: true });
     try {
-      await menuService.replaceMenuItem(menu._id, target.recipeId, this.data.familyId);
+      const tried = this.data.triedRecipeIds.concat([target.recipeId]);
+      const result = await menuService.replaceMenuItem(
+        menu._id,
+        target.recipeId,
+        this.data.familyId,
+        undefined,
+        tried,
+      );
+      // 记住这次换出来的菜，下次换菜时排除掉
+      this.setData({ triedRecipeIds: tried.concat([result.newItem.recipeId]) });
       wx.showToast({ title: '已换一道菜', icon: 'none' });
       await this.loadMenu(this.data.familyId);
     } catch (e) {
@@ -303,11 +366,38 @@ Page({
 
   /**
    * 查看做法：进入菜单详情。
-   * 沿用原有逻辑，仅按钮名称在草稿态显示为「锁定并查看做法」。
+   * 草稿态按钮文案是「锁定并查看做法」，因此这里先真正确认（锁定）菜单；
+   * 锁定成功才跳转，失败则停留并提示，用户可重试（并发下已被别人确认时视为成功）。
    */
-  onViewRecipes() {
+  async onViewRecipes() {
     const menu = this.data.todayMenu;
-    if (menu) wx.navigateTo({ url: '/pages/menu-detail/index?menuId=' + menu._id });
+    if (!menu) return;
+    // 锁定请求进行中：忽略重复点击，避免既重复确认又提前跳转
+    if (this.data.confirming) return;
+
+    if (menu.status === 'draft') {
+      this.setData({ confirming: true });
+      wx.showLoading({ title: '锁定中…', mask: true });
+      try {
+        await menuService.confirmMenu(menu._id, this.data.familyId);
+        await this.loadMenu(this.data.familyId);
+        wx.hideLoading();
+        wx.showToast({ title: '菜单已锁定', icon: 'success' });
+      } catch (e) {
+        wx.hideLoading();
+        wx.showToast({ title: getErrorMessage(e, '锁定失败'), icon: 'none' });
+        // 可能是并发确认：刷新后再判断，仍未确认就不跳转，避免「只查看未锁定」
+        await this.loadMenu(this.data.familyId);
+        if (this.data.menuStatusCode !== 'confirmed') {
+          this.setData({ confirming: false });
+          return;
+        }
+      } finally {
+        this.setData({ confirming: false });
+      }
+    }
+
+    wx.navigateTo({ url: '/pages/menu-detail/index?menuId=' + menu._id });
   },
 
   /* ========================== 导航 ========================== */
@@ -317,6 +407,10 @@ Page({
   onGoCreateFamily() { wx.navigateTo({ url: '/pages/family/create' }); },
   onGoJoinFamily() { wx.navigateTo({ url: '/pages/family/join' }); },
   onStartRecommend() { wx.navigateTo({ url: '/pages/recommend/index' }); },
+  /** 去点菜页查看/参与本餐次方案 */
+  onGoOrderTab() { wx.switchTab({ url: '/pages/order/index' }); },
+  /** 家常菜谱：进入现有菜谱库 */
+  onGoRecipes() { wx.navigateTo({ url: '/pages/recipes/index' }); },
   onGoShopping() { wx.navigateTo({ url: '/pages/shopping/index' }); },
   onGoHistory() {
     // 菜单是 tabBar 页面，navigateTo 不会生效；用全局标记让菜单页切到历史 tab

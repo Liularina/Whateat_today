@@ -37,13 +37,128 @@
 
     <view class="meta-row">
       <view class="chip chip--muted">{{statusLabel}}</view>
+      <view class="chip chip--cook" wx:if="{{cookName && (statusLabel === '已确认' || statusLabel === '已完成')}}">
+        掌勺人 {{cookName}} 已确认
+      </view>
       <text>{{dishes.length}} 道菜</text>
       <text class="meta-hint">（点击菜品可查看做法）</text>
+    </view>
+
+    <!-- 阶段二：本餐完成状态 -->
+    <view class="meal-status" wx:if="{{menuStatusCode === 'confirmed' || menuStatusCode === 'completed'}}">
+      <block wx:if="{{menuStatusCode === 'completed'}}">
+        <view class="meal-status__done">
+          <text class="meal-status__icon">✓</text>
+          <view class="meal-status__body">
+            <view class="meal-status__title">本餐已完成</view>
+            <view class="meal-status__sub" wx:if="{{completedAtLabel}}">{{completedAtLabel}}</view>
+          </view>
+        </view>
+      </block>
+      <block wx:elif="{{canComplete}}">
+        <!-- 只有掌勺人能点「完成制作」 -->
+        <view class="meal-status__hint">做好了吗？标记完成制作后，家人就能给每道菜打分。</view>
+        <view
+          class="wte-btn wte-btn--primary wte-btn--block"
+          bindtap="onCompleteMeal"
+        >{{completing ? '提交中…' : '完成制作'}}</view>
+      </block>
+      <block wx:else>
+        <!-- 干饭人看不到完成入口，等掌勺人操作 -->
+        <view class="meal-status__hint">等掌勺人完成制作后，就可以给每道菜打分了。</view>
+      </block>
+    </view>
+
+    <!-- 阶段二：掌勺人成长 -->
+    <view class="growth-card" wx:if="{{growth}}">
+      <view class="growth-card__head">
+        <view class="growth-card__level">{{growth.levelName}}</view>
+        <view class="growth-card__points">{{growth.points}} 分</view>
+      </view>
+      <view class="growth-card__owner">掌勺人 {{cookName || '未指定'}}<text wx:if="{{growth.nickname && growth.nickname !== cookName}}">（{{growth.nickname}}）</text></view>
+      <view class="growth-card__bar">
+        <view class="growth-card__bar-fill" style="width: {{growthProgress}}%"></view>
+      </view>
+      <view class="growth-card__next">{{growthNextLabel}}</view>
+      <view class="growth-card__last" wx:if="{{growthLastLabel}}">最近：{{growthLastLabel}}</view>
     </view>
 
     <view class="action-bar" wx:if="{{statusLabel === '已确认' || statusLabel === '已完成'}}">
       <view class="action-bar__btn" bindtap="onOpenShopping" hover-class="action-bar__btn--hover">
         采购清单 ›
+      </view>
+      <view class="action-bar__btn" wx:if="{{canRate}}" bindtap="onToggleReview" hover-class="action-bar__btn--hover">
+        {{reviewExpanded ? '收起评价' : '饭后评价'}} ›
+      </view>
+    </view>
+
+    <!-- 阶段二：饭后评价 -->
+    <view class="review" wx:if="{{canRate && reviewExpanded}}">
+      <view class="review__head">
+        <view class="review__title">饭后评价</view>
+        <view class="review__overall" wx:if="{{reviewSummary}}">
+          <text wx:if="{{reviewSummary.overallAverage !== null}}">本餐 {{reviewSummary.overallAverage}} 星</text>
+          <text wx:else>暂无评分</text>
+        </view>
+      </view>
+
+      <view class="review__progress" wx:if="{{reviewSummary}}">
+        {{reviewSummary.raterCount}}/{{reviewSummary.memberCount}} 位家人已评价
+        <text wx:if="{{reviewSummary.missingMembers.length > 0}}">　待评：{{reviewSummary.missingMembers}}</text>
+      </view>
+
+      <view class="review__error" wx:if="{{reviewError}}">{{reviewError}}</view>
+      <view class="review__loading" wx:if="{{reviewLoading}}">正在加载评价…</view>
+
+      <view
+        class="review-dish"
+        wx:for="{{reviewDishes}}"
+        wx:key="recipeId"
+      >
+        <view class="review-dish__head">
+          <view class="review-dish__name">{{item.name}}</view>
+          <view class="review-dish__stat">{{item.ratedCountLabel}}</view>
+        </view>
+
+        <view class="review-dish__avg" wx:if="{{item.averageLabel !== '暂无评分'}}">
+          平均 {{item.averageLabel}}
+        </view>
+
+        <!-- 自己的评分 -->
+        <view class="review-dish__stars">
+          <view
+            class="review-dish__star {{item.stars >= star ? 'review-dish__star--on' : ''}}"
+            wx:for="{{starOptions}}"
+            wx:for-item="star"
+            wx:key="*this"
+            data-id="{{item.recipeId}}"
+            data-stars="{{star}}"
+            bindtap="onSelectStars"
+          >★</view>
+          <text class="review-dish__mine" wx:if="{{item.stars > 0}}">我的 {{item.stars}} 星</text>
+          <text class="review-dish__mine review-dish__mine--none" wx:else>还没打分</text>
+        </view>
+
+        <input
+          class="review-dish__comment"
+          value="{{item.comment}}"
+          placeholder="说一句（可选）"
+          maxlength="50"
+          data-id="{{item.recipeId}}"
+          bindinput="onCommentInput"
+        />
+
+        <view class="review-dish__comments" wx:if="{{item.commentsText}}">{{item.commentsText}}</view>
+      </view>
+
+      <view
+        class="wte-btn wte-btn--primary wte-btn--block review__submit"
+        wx:if="{{reviewDishes.length > 0}}"
+        bindtap="onSubmitRatings"
+      >{{ratingSubmitting ? '提交中…' : '提交我的评分'}}</view>
+
+      <view class="review__note">
+        每道菜独立评分；可以随时修改自己的评分，不会重复计入。掌勺人按本餐平均分获得成长积分。
       </view>
     </view>
 

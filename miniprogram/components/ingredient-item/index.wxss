@@ -76,6 +76,16 @@
   font-weight: 600;
 }
 
+/* 数量为 0：用完但保留条目，弱化展示但仍可补货 */
+.ingredient__qty--empty {
+  color: #b3a79b;
+  font-weight: 500;
+}
+
+.ingredient--empty .ingredient__name {
+  color: #8d8177;
+}
+
 /* 快捷操作行：换到第二行，占满整宽 */
 .ingredient__ops {
   width: 100%;

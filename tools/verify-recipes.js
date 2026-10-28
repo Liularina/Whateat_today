@@ -177,8 +177,8 @@ function runDataChecks() {
   section('菜谱数据完整性');
 
   check(
-    '菜谱总数不少于 30 道',
-    BUILTIN_RECIPES.length >= 30,
+    '菜谱总数不少于 200 道',
+    BUILTIN_RECIPES.length >= 200,
     '实际 ' + BUILTIN_RECIPES.length,
   );
 
@@ -194,6 +194,14 @@ function runDataChecks() {
     check(
       '分类「' + category + '」至少 3 道',
       (byCategory[category] || 0) >= 3,
+      '实际 ' + (byCategory[category] || 0),
+    );
+  }
+  // 本轮扩容要求：儿童餐 + 减肥餐各 25 道
+  for (const category of ['儿童餐', '减肥餐']) {
+    check(
+      '分类「' + category + '」至少 20 道',
+      (byCategory[category] || 0) >= 20,
       '实际 ' + (byCategory[category] || 0),
     );
   }

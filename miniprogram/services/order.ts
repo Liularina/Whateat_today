@@ -11,6 +11,7 @@ import type {
   OrderListParams,
   OrderListResult,
   DeleteOrdersResult,
+  CleanupOpenOrdersResult,
 } from '../types/order';
 import { callFunction } from '../utils/cloud';
 
@@ -46,6 +47,18 @@ export const orderService = {
   /** 关闭点单 */
   close(orderId: string): Promise<CloseOrderResult> {
     return callFunction<CloseOrderResult, { orderId: string }>('order', 'closeOrder', { orderId });
+  },
+
+  /**
+   * 一次性关闭历史遗留的「进行中」点单（仅家庭管理员）。
+   * 份数点单功能已移除，旧点单永远等不到全员提交，只能批量收尾后才能删除。
+   */
+  cleanupOpenOrders(familyId: string): Promise<CleanupOpenOrdersResult> {
+    return callFunction<CleanupOpenOrdersResult, { familyId: string }>(
+      'order',
+      'cleanupOpenOrders',
+      { familyId },
+    );
   },
 
   /**

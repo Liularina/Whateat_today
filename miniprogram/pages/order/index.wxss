@@ -106,6 +106,12 @@
   color: var(--wte-text-weak);
 }
 
+.manage-bar-top__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
 .manage-bar-top__btn {
   flex: none;
   margin-left: 20rpx;
@@ -115,6 +121,14 @@
   background: #ffffff;
   font-size: var(--wte-fs-sm);
   color: var(--wte-text-weak);
+}
+
+/* 收尾是破坏性较低但不可逆的操作，用橙色提醒 */
+.manage-bar-top__btn--warn {
+  border-color: #f0a05a;
+  background: #fff3e8;
+  color: var(--wte-primary);
+  font-weight: 600;
 }
 
 /* 管理态下卡片可点选，给一点边界暗示 */
@@ -183,4 +197,260 @@
 
 .manage-bar__del {
   flex: 1;
+}
+/* ===== Phase 1：今日方案看板 ===== */
+.plan-board {
+  margin-bottom: 24rpx;
+  padding: 28rpx 28rpx 24rpx;
+  border-radius: 20rpx;
+  background: var(--wte-card);
+  box-shadow: 0 6rpx 24rpx rgba(180, 140, 105, 0.08);
+}
+
+.plan-board__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.plan-board__title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--wte-text);
+}
+
+.plan-board__cook {
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.plan-board__cook-name {
+  color: var(--wte-primary);
+  font-weight: 600;
+}
+
+.meal-tabs {
+  display: flex;
+  margin-top: 18rpx;
+  padding: 6rpx;
+  border-radius: 999rpx;
+  background: #f2eae2;
+}
+
+.meal-tab {
+  flex: 1;
+  padding: 12rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+  border-radius: 999rpx;
+}
+
+.meal-tab--active {
+  background: #ffffff;
+  color: var(--wte-text);
+  font-weight: 600;
+}
+
+.plan-board__loading,
+.plan-board__error {
+  padding: 28rpx 0 12rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.plan-board__error {
+  color: #d9534f;
+}
+
+.plan-empty {
+  padding: 32rpx 8rpx 8rpx;
+  text-align: center;
+}
+
+.plan-empty__text {
+  margin-bottom: 24rpx;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--wte-text-weak);
+}
+
+.plan-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 20rpx 0 8rpx;
+  font-size: 23rpx;
+  color: var(--wte-text-weak);
+}
+
+.plan-meta__part {
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.plan-meta__missing {
+  margin-left: 12rpx;
+}
+
+.plan-meta__status {
+  margin-left: auto;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  background: #fff3e8;
+  color: var(--wte-primary);
+}
+
+.plan-meta__status--done {
+  background: #eef7ee;
+  color: #3d8b40;
+}
+
+.plan-card {
+  margin-top: 18rpx;
+  padding: 24rpx;
+  border: 2rpx solid #f0e6dc;
+  border-radius: 18rpx;
+  background: #fffdfa;
+}
+
+.plan-card--selected {
+  border-color: var(--wte-primary);
+  background: #fff7ef;
+}
+
+.plan-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.plan-card__title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--wte-text);
+}
+
+.plan-card__time {
+  font-size: 23rpx;
+  color: var(--wte-text-weak);
+}
+
+.plan-card__reason {
+  margin-top: 10rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+  color: var(--wte-text-weak);
+}
+
+.plan-dish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f6eee6;
+}
+
+.plan-dish:last-of-type {
+  border-bottom: none;
+}
+
+.plan-dish__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plan-dish__name {
+  font-size: 27rpx;
+  color: var(--wte-text);
+}
+
+.plan-dish__meta {
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  color: var(--wte-text-weak);
+}
+
+.plan-dish__votes {
+  display: flex;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.vote-chip {
+  margin-left: 10rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: #f4ece4;
+  font-size: 22rpx;
+  color: var(--wte-text-weak);
+}
+
+.vote-chip--on {
+  background: var(--wte-primary);
+  color: #ffffff;
+}
+
+.plan-card__who {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #9a8c7d;
+  line-height: 1.6;
+}
+
+.plan-card__who-name {
+  color: var(--wte-text-weak);
+}
+
+.plan-card__confirm {
+  margin-top: 20rpx;
+}
+
+.plan-card__hint {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #9a8c7d;
+  line-height: 1.6;
+}
+
+.plan-note {
+  display: flex;
+  align-items: center;
+  margin-top: 20rpx;
+  padding: 10rpx 16rpx;
+  border-radius: 12rpx;
+  background: #f8f1ea;
+}
+
+.plan-note__input {
+  flex: 1;
+  font-size: 25rpx;
+  color: var(--wte-text);
+}
+
+.plan-note__save {
+  margin-left: 16rpx;
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  font-size: 24rpx;
+  color: var(--wte-primary);
+}
+
+.plan-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 20rpx;
+}
+
+.plan-footer__link {
+  padding: 12rpx 28rpx;
+  font-size: 25rpx;
+  color: var(--wte-primary);
+}
+
+.plan-footer__link + .plan-footer__link {
+  margin-left: 20rpx;
 }

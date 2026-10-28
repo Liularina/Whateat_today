@@ -4,11 +4,22 @@
     <view class="page-header__subtitle">看看家里正在点单和已经结束的点单</view>
   </view>
 
-  <view class="manage-bar-top" wx:if="{{hasFamily && (selectableCount > 0 || manageMode)}}">
+  <view
+    class="manage-bar-top"
+    wx:if="{{hasFamily && (selectableCount > 0 || manageMode || openOrderCount > 0)}}"
+  >
     <text class="manage-bar-top__hint">
-      {{manageMode ? '勾选已关闭的点单，然后删除' : '已关闭的点单可以勾选删除'}}
+      {{manageMode ? '勾选已关闭的点单，然后删除' : (selectableCount > 0 ? '已关闭的点单可以勾选删除' : '进行中的点单需先收尾')}}
     </text>
-    <view class="manage-bar-top__btn" bindtap="onToggleManage">{{manageMode ? '完成' : '管理'}}</view>
+    <view class="manage-bar-top__actions">
+      <!-- 历史遗留的进行中点单永远等不到「全员提交」，由管理员一次性收尾 -->
+      <view
+        class="manage-bar-top__btn manage-bar-top__btn--warn"
+        wx:if="{{openOrderCount > 0 && !manageMode}}"
+        bindtap="onCleanupOpenOrders"
+      >{{cleaningOrders ? '收尾中...' : '收尾进行中'}}</view>
+      <view class="manage-bar-top__btn" bindtap="onToggleManage">{{manageMode ? '完成' : '管理'}}</view>
+    </view>
   </view>
 
   <view class="filter-bar" wx:if="{{hasFamily}}">
@@ -27,6 +38,128 @@
       data-filter="closed"
       bindtap="onSwitchFilter"
     >已关闭</view>
+  </view>
+
+  <!-- ===== 本餐次点单：掌勺人保存 → 家人建议 → 掌勺人锁定 ===== -->
+  <view class="plan-board" wx:if="{{hasFamily}}">
+    <view class="plan-board__head">
+      <view class="plan-board__title">本餐点单</view>
+      <view class="plan-board__cook" wx:if="{{boardCookName}}">
+        掌勺人 <text class="plan-board__cook-name">{{boardCookName}}</text>
+      </view>
+    </view>
+
+    <view class="meal-tabs">
+      <view
+        class="meal-tab {{boardMealType === item.value ? 'meal-tab--active' : ''}}"
+        wx:for="{{mealTabs}}"
+        wx:key="value"
+        data-value="{{item.value}}"
+        bindtap="onSwitchMeal"
+      >{{item.label}}</view>
+    </view>
+
+    <view class="plan-board__loading" wx:if="{{boardLoading}}">加载中…</view>
+
+    <!-- 这一餐还没有人发起 -->
+    <view class="plan-empty" wx:elif="{{boardAvailable && !boardPlanId}}">
+      <view class="plan-empty__text">这餐还没有人发起。发起人就是掌勺人，一顿餐只有一个人能发起。</view>
+      <view class="wte-btn wte-btn--primary" bindtap="onGoRecommend">发起推荐并掌勺</view>
+    </view>
+
+    <!-- 已有方案，掌勺人还没保存点单 -->
+    <view class="plan-empty" wx:elif="{{boardAvailable && boardStatus === 'open' && !boardHasDraft}}">
+      <view class="plan-empty__text" wx:if="{{boardIsCook}}">从推荐里挑好菜，保存成这一餐的点单，家人就能提建议了。</view>
+      <view class="plan-empty__text" wx:else>掌勺人还在挑菜，保存点单后你就能提建议了。</view>
+      <view class="wte-btn wte-btn--primary" wx:if="{{boardIsCook}}" bindtap="onGoSaveOrder">去挑菜保存点单</view>
+    </view>
+
+    <block wx:elif="{{boardAvailable && boardHasDraft}}">
+      <view class="plan-meta">
+        <text class="plan-meta__part">已提建议 {{boardParticipantCount}}/{{boardMemberCount}}</text>
+        <text class="plan-meta__missing">{{boardMissingText}}</text>
+        <text class="plan-meta__status {{boardStatus === 'confirmed' ? 'plan-meta__status--done' : ''}}">
+          {{boardStatus === 'confirmed' ? '已锁定' : '可提建议'}}
+        </text>
+      </view>
+
+      <!-- 菜品列表：家人在可提建议时勾选想吃/不想吃 -->
+      <view class="plan-card">
+        <view class="plan-card__head">
+          <text class="plan-card__title">掌勺人保存的点单</text>
+        </view>
+
+        <view class="plan-dish" wx:for="{{boardDishes}}" wx:key="recipeId" wx:for-item="dish">
+          <view class="plan-dish__main">
+            <text class="plan-dish__name">{{dish.name}}</text>
+            <text class="plan-dish__meta" wx:if="{{dish.meta}}">{{dish.meta}}</text>
+          </view>
+          <view class="plan-dish__votes" wx:if="{{boardStatus === 'open'}}">
+            <text
+              class="vote-chip {{dish.myVote === 'want' ? 'vote-chip--on' : ''}}"
+              data-recipe-id="{{dish.recipeId}}"
+              data-vote="want"
+              bindtap="onVoteDish"
+            >想吃{{dish.wantCount > 0 ? ' ' + dish.wantCount : ''}}</text>
+            <text
+              class="vote-chip {{dish.myVote === 'avoid' ? 'vote-chip--on' : ''}}"
+              data-recipe-id="{{dish.recipeId}}"
+              data-vote="avoid"
+              bindtap="onVoteDish"
+            >不想吃{{dish.avoidCount > 0 ? ' ' + dish.avoidCount : ''}}</text>
+          </view>
+        </view>
+
+        <!-- 掌勺人看建议：谁想吃、谁不想吃 -->
+        <block wx:if="{{boardStatus === 'open'}}">
+          <view class="plan-card__who" wx:for="{{boardDishes}}" wx:key="recipeId" wx:for-item="dish">
+            <block wx:if="{{dish.wantText || dish.avoidText}}">
+              <text class="plan-card__who-name">{{dish.name}}：</text>
+              <text wx:if="{{dish.wantText}}">{{dish.wantText}}</text>
+              <text wx:if="{{dish.wantText && dish.avoidText}}">；</text>
+              <text wx:if="{{dish.avoidText}}">{{dish.avoidText}}</text>
+            </block>
+          </view>
+        </block>
+
+        <!-- 掌勺人锁定：不必等家人全部提完 -->
+        <view
+          class="wte-btn wte-btn--primary plan-card__confirm"
+          wx:if="{{boardCanConfirm}}"
+          bindtap="onLockMenu"
+        >锁定这份菜单</view>
+        <view class="plan-card__hint" wx:if="{{boardCanConfirm}}">
+          建议只作参考，最终菜单由你决定；家人没提完也可以直接锁定。
+        </view>
+        <view class="plan-card__hint" wx:if="{{boardCanTakeOver}}">
+          原掌勺人已不在家庭里，这一餐由你接手掌勺。
+        </view>
+      </view>
+
+      <view class="plan-note" wx:if="{{boardStatus === 'open'}}">
+        <input
+          class="plan-note__input"
+          value="{{boardNote}}"
+          placeholder="留句话给掌勺人（可选）"
+          maxlength="50"
+          bindinput="onNoteInput"
+        />
+        <view class="plan-note__save" bindtap="onSaveNote">保存</view>
+      </view>
+
+      <view class="plan-footer" wx:if="{{boardStatus === 'open' && (boardCanSetCook || boardCanRegenerate)}}">
+        <view class="plan-footer__link" wx:if="{{boardCanSetCook}}" bindtap="onChangeCook">交接掌勺人</view>
+        <view class="plan-footer__link" wx:if="{{boardCanRegenerate}}" bindtap="onRegeneratePlans">换一批推荐</view>
+      </view>
+
+      <view class="plan-footer" wx:if="{{boardStatus === 'confirmed'}}">
+        <view class="plan-footer__link" bindtap="onOpenBoardMenu">查看最终菜单</view>
+        <view class="plan-footer__link" bindtap="onOpenShopping">查看采购清单</view>
+        <view class="plan-footer__link" wx:if="{{boardCanRegenerate}}" bindtap="onReplaceConfirmed">重新生成本餐次</view>
+      </view>
+    </block>
+
+    <view class="plan-board__error" wx:if="{{boardError}}">{{boardError}}</view>
   </view>
 
   <loading-state wx:if="{{!familyReady}}" text="正在准备..." />
@@ -100,8 +233,22 @@
         </view>
       </view>
     </block>
-    <view class="wte-btn wte-btn--primary wte-btn--block" wx:else bindtap="onCreateOrder">
-      发起家庭点单
-    </view>
+    <block wx:else>
+      <view
+        class="wte-btn wte-btn--primary wte-btn--block"
+        wx:if="{{boardCanConfirm}}"
+        bindtap="onLockMenu"
+      >锁定这份菜单</view>
+      <view
+        class="wte-btn wte-btn--primary wte-btn--block"
+        wx:elif="{{boardIsCook && boardStatus === 'open' && !boardHasDraft}}"
+        bindtap="onGoSaveOrder"
+      >去挑菜保存点单</view>
+      <view
+        class="wte-btn wte-btn--ghost wte-btn--block"
+        wx:elif="{{boardStatus === 'confirmed' && boardMenuId}}"
+        bindtap="onOpenBoardMenu"
+      >查看最终菜单</view>
+    </block>
   </view>
 </view>

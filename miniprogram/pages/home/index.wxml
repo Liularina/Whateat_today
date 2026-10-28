@@ -14,6 +14,7 @@
     <view class="topbar__title">家庭管理</view>
     <view class="topbar__family">
       <text>{{familyName}}</text>
+      <text class="topbar__members" wx:if="{{memberCount > 0}}">{{memberCount}} 人</text>
       <text class="topbar__arrow">›</text>
     </view>
   </view>
@@ -95,11 +96,11 @@
             bindtap="onSwapDish"
           >{{swapping ? '换菜中…' : '换一道菜'}}</view>
 
-          <!-- 查看做法：逻辑与原「查看做法」保持一致，仅改名称 -->
+          <!-- 查看做法：草稿态会先真正锁定菜单，成功后再进入详情 -->
           <view
-            class="mc-btn {{menuStatusCode === 'draft' ? 'mc-btn--ghost' : 'mc-btn--primary'}}"
+            class="mc-btn {{menuStatusCode === 'draft' ? 'mc-btn--ghost' : 'mc-btn--primary'}} {{confirming ? 'mc-btn--busy' : ''}}"
             bindtap="onViewRecipes"
-          >{{menuStatusCode === 'draft' ? '锁定并查看做法' : '查看做法'}}</view>
+          >{{confirming ? '锁定中…' : (menuStatusCode === 'draft' ? '锁定并查看做法' : '查看做法')}}</view>
         </view>
       </view>
 
@@ -108,7 +109,8 @@
         <view class="menu-card__plate"></view>
         <view class="menu-card__text">今天还没有决定吃什么</view>
         <view class="mc-actions mc-actions--empty">
-          <view class="mc-btn mc-btn--primary mc-btn--wide" bindtap="onStartRecommend">AI 推荐菜单</view>
+          <view class="mc-btn mc-btn--primary mc-btn--wide" wx:if="{{boardCookName}}" bindtap="onGoOrderTab">查看今日方案</view>
+          <view class="mc-btn mc-btn--primary mc-btn--wide" wx:else bindtap="onStartRecommend">AI 推荐菜单</view>
         </view>
       </view>
 
@@ -116,6 +118,20 @@
       <view class="menu-card menu-card--err" wx:elif="{{menuState === 'error'}}">
         <text>菜单加载失败</text>
         <text class="banner__retry" bindtap="onReloadMenu">重试</text>
+      </view>
+
+      <!-- 本餐次协作状态：掌勺人 + 家庭点选进度 -->
+      <view class="collab" wx:if="{{boardCookName}}" bindtap="onGoOrderTab" hover-class="collab--hover">
+        <view class="collab__main">
+          <text class="collab__cook">掌勺人 {{boardCookName}}</text>
+          <text class="collab__count" wx:if="{{boardMemberCount > 0}}">{{boardProgressLabel}} {{boardParticipant}}/{{boardMemberCount}}</text>
+        </view>
+        <view class="collab__right">
+          <text class="collab__status {{boardStatus === 'confirmed' ? 'collab__status--done' : ''}}">
+            {{boardStatus === 'confirmed' ? '已确认' : '选择中'}}
+          </text>
+          <text class="collab__link">去点菜 ›</text>
+        </view>
       </view>
     </view>
 
@@ -149,9 +165,9 @@
     <view class="quick">
       <text class="quick__title">快捷操作</text>
       <view class="quick__row">
-        <view class="q-item" bindtap="onStartRecommend" hover-class="q-item--hover">
-          <view class="q-item__icon">🍳</view>
-          <view class="q-item__label">AI 推荐</view>
+        <view class="q-item" bindtap="onGoRecipes" hover-class="q-item--hover">
+          <view class="q-item__icon">📖</view>
+          <view class="q-item__label">家常菜谱</view>
         </view>
         <view class="q-item" bindtap="onGoShopping" hover-class="q-item--hover">
           <view class="q-item__icon">🛒</view>

@@ -152,6 +152,8 @@ export interface OrderListItem {
 }
 
 export interface OrderListResult {
+  /** 本家庭所有「进行中」点单数（不受筛选与分页影响） */
+  openTotal?: number;
   items: OrderListItem[];
   total: number;
   page: number;
@@ -161,6 +163,14 @@ export interface OrderListResult {
 /* ============================== 删除 ============================== */
 
 /** deleteOrders 返回 */
+/** 存量「进行中」点单批量收尾的结果 */
+export interface CleanupOpenOrdersResult {
+  closed: string[];
+  closedCount: number;
+  /** 还有更多待处理（单次最多 50 条） */
+  hasMore: boolean;
+}
+
 export interface DeleteOrdersResult {
   deleted: string[];
   deletedCount: number;

@@ -89,7 +89,7 @@ Page({
     ingredientCount: 0,
     /** 过期 + 临期条数 */
     warningCount: 0,
-    /** 分类折叠状态：code → 是否折叠 */
+    /** 分类折叠状态：code → 是否折叠；未出现 key 时按折叠处理（进页默认全收起） */
     collapsedMap: {} as Record<string, boolean>,
     /** 「食材 _id → 热量(kcal)」，来自 nutrition 云函数；只用于展示 */
     calorieMap: {} as Record<string, number>,
@@ -394,8 +394,12 @@ Page({
     if (!code) {
       return;
     }
+    // 默认折叠：map 里没有记录说明还没手动展开过
+    const current = this.data.collapsedMap[code];
+    const isCollapsed = current === undefined ? true : !!current;
+
     const collapsedMap = Object.assign({}, this.data.collapsedMap);
-    collapsedMap[code] = !collapsedMap[code];
+    collapsedMap[code] = !isCollapsed;
     this.setData({ collapsedMap: collapsedMap });
     this.applyList(this.data.ingredients, false, this.data.calorieMap);
   },
@@ -671,24 +675,34 @@ Page({
     });
   },
 
-  /** 消耗：扣减数量；剩余为 0 或负数时转为移除 */
+  /** 消耗：扣减数量；用完时让用户选择「移除」还是「保留为 0」 */
   async consumeIngredient(item: Ingredient, consume: number) {
     const remain = roundQuantity(item.quantity - consume);
     if (remain <= 0) {
       const name = item.standardName || item.name;
-      wx.showModal({
-        title: '库存将用完',
-        content:
-          '消耗数量已用完「' + name + '」的库存，是否从库存移除？' +
-          '移除后不保留任何历史记录。',
-        confirmText: '移除',
-        confirmColor: '#e8850c',
-        success: (res) => {
-          if (res.confirm) {
-            void this.deleteIngredient(item._id, '已用完，已移除');
-          }
-        },
+      const choice = await new Promise<'remove' | 'keep' | 'cancel'>((resolve) => {
+        wx.showModal({
+          title: '库存已用完',
+          content:
+            '「' + name + '」的库存已用完。移除会删除这条食材；保留则数量记为 0，条目继续留在列表里。',
+          confirmText: '移除',
+          cancelText: '保留为 0',
+          confirmColor: '#e8850c',
+          success: (res) => {
+            if (res.confirm) resolve('remove');
+            else if (res.cancel) resolve('keep');
+            else resolve('cancel');
+          },
+          fail: () => resolve('cancel'),
+        });
       });
+
+      if (choice === 'remove') {
+        await this.deleteIngredient(item._id, '已用完，已移除');
+      } else if (choice === 'keep') {
+        // 数量归零但条目保留，之后可以随时补货
+        await this.applyQuantityUpdate(item, 0, false, '已用完，库存记为 0');
+      }
       return;
     }
     await this.applyQuantityUpdate(item, remain, false, '已消耗');

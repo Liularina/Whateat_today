@@ -76,6 +76,10 @@ export interface RecommendMenusInput {
   servings: number;
   preferences?: string;
   excludeRecipeIds?: string[];
+  /** true = 家人明确要求换一批；服务端会校验只有掌勺人可以重新生成 */
+  force?: boolean;
+  /** 已确认菜单被替换时，掌勺人二次确认标记 */
+  confirmReplace?: boolean;
 }
 
 /** 推荐菜谱视图（前端展示用） */
@@ -93,6 +97,8 @@ export interface RecommendRecipeView {
 
 /** 一套推荐菜单 */
 export interface RecommendMenuView {
+  /** 方案在本次餐次中的稳定 ID（如 plan-1），用于偏好记录 */
+  planId?: string;
   title: string;
   reason: string;
   recipeIds: string[];
@@ -111,6 +117,18 @@ export interface RecommendMenuView {
 /** recommend 云函数 recommendMenus 返回 */
 export interface RecommendMenusResult {
   recommendationId: string;
+  /** 落库后的方案文档 ID；集合缺失时为空串（不阻断推荐） */
+  planId?: string;
+  planStatus?: 'open' | 'confirmed';
+  planVersion?: number;
+  shared?: boolean;
+  /** 本次是否直接复用了本餐次已有方案 */
+  reused?: boolean;
+  cookId?: string;
+  cookName?: string;
+  /** 方案确认后关联的最终菜单 */
+  menuId?: string;
+  date?: string;
   mealType: MealType;
   servings: number;
   familyId?: string;
@@ -126,6 +144,8 @@ export interface SaveMenuInput {
   mealType: MealType;
   servings: number;
   items: RecommendRecipeView[];
+  /** Phase 1：来源方案标题（便于历史菜单展示） */
+  planTitle?: string;
 }
 
 /** saveMenu 云函数返回（等同于 Menu） */

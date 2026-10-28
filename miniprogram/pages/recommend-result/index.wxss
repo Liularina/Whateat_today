@@ -247,3 +247,28 @@
   color: var(--wte-brand);
   background: transparent;
 }
+/* Phase 1：掌勺人提示 */
+.cook-hint {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.non-cook-hint {
+  margin-top: 16rpx;
+  padding: 16rpx;
+  border-radius: 12rpx;
+  background: #f8f1ea;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--wte-text-weak);
+}
+
+.confirmed-banner {
+  margin-top: 14rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  background: #eef7ee;
+  font-size: 24rpx;
+  color: #3d8b40;
+}

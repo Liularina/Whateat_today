@@ -29,6 +29,8 @@ const REGEXP_CMD = '__regexp__';
 const GTE_CMD = '__gte__';
 const LTE_CMD = '__lte__';
 const LT_CMD = '__lt__';
+const NEQ_CMD = '__neq__';
+const EXISTS_CMD = '__exists__';
 const AND_CMD = '__and__';
 
 /** 内部使用的原子自增标记，对应 db.command.inc */
@@ -53,6 +55,10 @@ const KNOWN_COLLECTIONS = [
   'family_cookbook',
   'cookbook_versions',
   'shopping_lists',
+  'menu_plans',
+  'meal_preferences',
+  'meal_reviews',
+  'chef_points',
 ];
 
 function createMockCloud() {
@@ -104,22 +110,37 @@ function createMockCloud() {
       return { [IN_CMD]: Array.isArray(values) ? values.slice() : [] };
     },
     gte(value) {
-      return { [GTE_CMD]: value };
+      return comparison(GTE_CMD, value);
     },
     lte(value) {
-      return { [LTE_CMD]: value };
+      return comparison(LTE_CMD, value);
     },
     and() {
       const conditions = Array.prototype.slice.call(arguments);
       return { [AND_CMD]: conditions };
     },
     lt(value) {
-      return { [LT_CMD]: value };
+      return comparison(LT_CMD, value);
+    },
+    neq(value) {
+      return { [NEQ_CMD]: value };
+    },
+    exists(value) {
+      return { [EXISTS_CMD]: !!value };
     },
     inc(value) {
       return { [INC_CMD]: value };
     },
   };
+
+  /** 真实 SDK 的比较命令支持 .and() 链式拼接，这里保持一致 */
+  function comparison(mark, value) {
+    const obj = { [mark]: value };
+    obj.and = function () {
+      return { [AND_CMD]: [obj].concat(Array.prototype.slice.call(arguments)) };
+    };
+    return obj;
+  }
 
   /** 判断单个字段值是否满足（可能是普通值，也可能是命令对象） */
   function matchValue(actual, expected) {
@@ -144,12 +165,31 @@ function createMockCloud() {
       if (expected[IN_CMD]) {
         return expected[IN_CMD].indexOf(actual) !== -1;
       }
+      if (Object.prototype.hasOwnProperty.call(expected, NEQ_CMD)) {
+        return actual !== expected[NEQ_CMD];
+      }
+      if (Object.prototype.hasOwnProperty.call(expected, EXISTS_CMD)) {
+        const present = actual !== undefined && actual !== null;
+        return present === expected[EXISTS_CMD];
+      }
     }
     return actual === expected;
   }
 
   function matches(doc, condition) {
-    return Object.keys(condition).every((key) => matchValue(doc[key], condition[key]));
+    return Object.keys(condition).every((key) => {
+      // 逻辑或：{$or: [cond1, cond2, ...]}，任一子条件整体成立即可
+      if (key === '$or') {
+        const list = Array.isArray(condition[key]) ? condition[key] : [];
+        return list.some((sub) => matches(doc, sub || {}));
+      }
+      // 逻辑与：{$and: [...]}
+      if (key === '$and') {
+        const list = Array.isArray(condition[key]) ? condition[key] : [];
+        return list.every((sub) => matches(doc, sub || {}));
+      }
+      return matchValue(doc[key], condition[key]);
+    });
   }
 
   /**

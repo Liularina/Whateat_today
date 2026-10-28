@@ -3,6 +3,14 @@
  */
 import type { Difficulty, RecipeIngredient } from './recipe';
 
+/** 完成用餐时固化的菜品快照（阶段二） */
+export interface MenuSnapshotItem {
+  recipeId: string;
+  name: string;
+  category: string;
+  position: number;
+}
+
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'midnight_snack';
 
 export type MenuStatus = 'draft' | 'confirmed' | 'completed';
@@ -43,6 +51,19 @@ export interface Menu {
   _id: string;
   familyId: string;
   userId: string;
+  /** Phase 1：本餐次掌勺人（确认权限依据） */
+  cookId?: string;
+  cookName?: string;
+  /** Phase 1：来源方案 */
+  planId?: string;
+  planTitle?: string;
+  /** 阶段二：菜单版本（确认时定型，完成用餐后评价对象绑定该版本） */
+  menuVersion?: number;
+  /** 阶段二：完成用餐时固化的菜品快照 */
+  snapshotItems?: MenuSnapshotItem[];
+  /** 阶段二：完成时间 / 完成人 */
+  completedAt?: string;
+  completedBy?: string;
   mealType: MealType;
   servings: number;
   items: MenuItem[];

@@ -46,6 +46,14 @@ function fail(code, message, details) {
 const ERR_COLLECTION_NOT_EXIST = -502005;
 const ERR_DOC_NOT_EXIST = -502002;
 
+/** 点单超过这个时长仍停在 open，就视为「等不到人」，允许直接关闭 */
+const STALE_ORDER_HOURS = 48;
+
+/** 超时点单的截止时间（ISO 字符串，与 createdAt 同口径比较） */
+function staleCutoff() {
+  return new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000).toISOString();
+}
+
 function isCollectionMissing(err) {
   if (!err) return false;
   // 有 errCode 时以错误码为准：-502005 是集合不存在，-502002 是文档不存在。
@@ -85,6 +93,36 @@ async function requireFamilyMember(openid, familyId) {
     return { error: fail('NOT_IN_FAMILY', '你不是该家庭的成员') };
   }
   return { user, member };
+}
+
+/** 家庭全部成员（含昵称），用于「所有人是否都已点单」的校验 */
+async function loadFamilyMembers(familyId) {
+  const memberRes = await db.collection('family_members')
+    .where({ familyId: familyId })
+    .orderBy('joinedAt', 'asc')
+    .limit(50)
+    .get();
+  const memberships = memberRes.data || [];
+  if (memberships.length === 0) return [];
+
+  const userIds = memberships.map((item) => item.userId);
+  let userMap = {};
+  try {
+    const userRes = await db.collection('users').where({ _id: _.in(userIds) }).get();
+    for (const user of userRes.data || []) userMap[user._id] = user;
+  } catch (e) {
+    console.warn('[order] 读取成员昵称失败', e && (e.errMsg || e.message));
+    userMap = {};
+  }
+
+  return memberships.map((item) => {
+    const user = userMap[item.userId];
+    // 历史数据里昵称字段可能是 nickName，两种都要认
+    return {
+      userId: item.userId,
+      nickname: (user && (user.nickname || user.nickName)) || '家人',
+    };
+  });
 }
 
 function requireOwner(member) {
@@ -539,10 +577,16 @@ async function handleListOrders(event, wxContext) {
     condition.status = event.status;
   }
 
-  let total, docs;
+  let total, docs, openTotal;
   try {
     const countResult = await db.collection('family_orders').where(condition).count();
     total = countResult.total || 0;
+    // 进行中的总数单独统计：列表是分页的，前端按当前页算会少算，
+    // 而「收尾进行中」这个入口必须知道是否真的还有存量。
+    const openCountResult = await db.collection('family_orders')
+      .where({ familyId: familyId, status: 'open' })
+      .count();
+    openTotal = openCountResult.total || 0;
     docs = [];
     if (total > 0) {
       const res = await db.collection('family_orders')
@@ -578,7 +622,48 @@ async function handleListOrders(event, wxContext) {
     memberCount: doc.totalParticipants || 0,
   }));
 
-  return ok({ items: items, total: total, page: page, pageSize: pageSize });
+  return ok({
+    items: items,
+    total: total,
+    page: page,
+    pageSize: pageSize,
+    openTotal: openTotal,
+  });
+}
+
+/**
+ * 汇总「每人份数明细」为按菜品聚合的快照。
+ *
+ * closeOrder 与存量点单清理共用同一套口径，避免两条路径写出不同结构。
+ */
+async function buildFinalSummary(menuId, rows) {
+  const recipeMap = {};
+  if (menuId) {
+    const menu = await readMenu(menuId);
+    if (menu && menu.items) {
+      for (const it of menu.items) {
+        recipeMap[it.recipeId] = { name: it.name, category: it.category || '' };
+      }
+    }
+  }
+
+  const finalDishSummary = {};
+  for (const doc of rows || []) {
+    for (const item of (doc.items || [])) {
+      if (!finalDishSummary[item.recipeId]) {
+        finalDishSummary[item.recipeId] = {
+          recipeId: item.recipeId,
+          name: (recipeMap[item.recipeId] || {}).name || item.recipeId,
+          category: (recipeMap[item.recipeId] || {}).category || '',
+          peopleCount: 0,
+          totalQuantity: 0,
+        };
+      }
+      finalDishSummary[item.recipeId].peopleCount += 1;
+      finalDishSummary[item.recipeId].totalQuantity += item.quantity || 0;
+    }
+  }
+  return finalDishSummary;
 }
 
 /* ============================== closeOrder ============================== */
@@ -615,44 +700,47 @@ async function handleCloseOrder(event, wxContext) {
     return fail('INVALID_STATUS', '只能关闭进行中的点单');
   }
 
-  // 生成最终汇总快照
-  let items;
+  // 超时点单不再要求全员点单：
+  //   新版流程已经不再创建份数点单，历史 open 点单永远等不到「全员提交」，
+  //   不放开这一条它们就会永久停在 open、既不能关闭也不能删除。
+  const staleAt = staleCutoff();
+  const isStale = String(order.createdAt || '') < staleAt;
+
+  // 全员点单校验：必须所有家庭成员都提交过自己的份数，才能关闭点单。
+  // 「提交全 0 份」也算完成，代表这位家人明确表示这餐不要。
+  let submittedRows;
   try {
     const result = await db.collection('family_order_items')
       .where({ orderId: orderId })
       .get();
-    items = result.data || [];
+    submittedRows = result.data || [];
   } catch (e) {
-    if (isCollectionMissing(e)) items = [];
+    if (isCollectionMissing(e)) submittedRows = [];
     else throw e;
   }
 
-  const recipeMap = {};
-  if (order.menuId) {
-    const menu = await readMenu(order.menuId);
-    if (menu && menu.items) {
-      for (const it of menu.items) {
-        recipeMap[it.recipeId] = { name: it.name, category: it.category || '' };
-      }
-    }
+  const members = await loadFamilyMembers(order.familyId);
+  const memberIds = {};
+  for (const m of members) memberIds[m.userId] = true;
+
+  const submitted = {};
+  for (const row of submittedRows) {
+    if (row && row.userId && memberIds[row.userId]) submitted[row.userId] = true;
+  }
+  const missingMembers = members
+    .filter((m) => !submitted[m.userId])
+    .map((m) => m.nickname || '家人');
+
+  if (missingMembers.length > 0 && !isStale) {
+    return fail(
+      'ORDER_NOT_ALL_COMPLETED',
+      '还有 ' + missingMembers.join('、') + ' 没有点单，等家人点完才能关闭',
+    );
   }
 
-  const finalDishSummary = {};
-  for (const doc of items) {
-    for (const item of (doc.items || [])) {
-      if (!finalDishSummary[item.recipeId]) {
-        finalDishSummary[item.recipeId] = {
-          recipeId: item.recipeId,
-          name: (recipeMap[item.recipeId] || {}).name || item.recipeId,
-          category: (recipeMap[item.recipeId] || {}).category || '',
-          peopleCount: 0,
-          totalQuantity: 0,
-        };
-      }
-      finalDishSummary[item.recipeId].peopleCount += 1;
-      finalDishSummary[item.recipeId].totalQuantity += item.quantity || 0;
-    }
-  }
+  // 生成最终汇总快照（复用上面已经读到的明细，不重复查询）
+  const items = submittedRows;
+  const finalDishSummary = await buildFinalSummary(order.menuId, items);
 
   const now = new Date().toISOString();
   await db.collection('family_orders').doc(orderId).update({
@@ -744,6 +832,96 @@ async function handleDeleteOrders(event, wxContext) {
   return ok({ deleted: deleted, deletedCount: deleted.length });
 }
 
+/* ============================== 存量点单清理 ============================== */
+
+/**
+ * 关闭历史遗留的「进行中」点单（一次性维护）。
+ *
+ * 背景：份数点单功能已从产品中移除，不再有新的点单产生，
+ * 但旧数据仍停在 `open`。而删除只允许 `closed`，
+ * 关闭又要求「全员提交份数」——这个前提再也无法满足，
+ * 于是这些点单永久卡住、既关不掉也删不掉。
+ *
+ * 这里只处理存量，不改变日常流程：
+ *   - 只动 `status = 'open'` 的点单，已关闭的不碰；
+ *   - 用与 closeOrder 相同的汇总口径写入 finalSummary，保证结构一致；
+ *   - 标记 `closedBy = 'system'`、`closeReason = 'legacy_cleanup'`，便于审计；
+ *   - 单次最多处理 MAX_CLEANUP_BATCH 条，可重复执行（幂等）。
+ *
+ * 权限：仅家庭管理员可触发，且只影响自己的家庭。
+ */
+const MAX_CLEANUP_BATCH = 50;
+
+async function handleCleanupOpenOrders(event, wxContext) {
+  const openid = wxContext.OPENID || '';
+  const familyId = event.familyId || '';
+
+  if (!familyId) return fail('INVALID_PARAMS', '缺少 familyId');
+
+  const auth = await requireFamilyMember(openid, familyId);
+  if (auth.error) return auth.error;
+  if (auth.member.role !== 'owner') {
+    return fail('FORBIDDEN', '只有家庭管理员可以清理历史点单');
+  }
+
+  let docs;
+  try {
+    const res = await db.collection('family_orders')
+      .where({ familyId: familyId, status: 'open' })
+      .orderBy('createdAt', 'asc')
+      .limit(MAX_CLEANUP_BATCH)
+      .get();
+    docs = res.data || [];
+  } catch (e) {
+    if (isCollectionMissing(e)) {
+      return ok({ closed: [], closedCount: 0, hasMore: false });
+    }
+    throw e;
+  }
+
+  const closed = [];
+  for (const order of docs) {
+    let rows = [];
+    try {
+      const itemsRes = await db.collection('family_order_items')
+        .where({ orderId: order._id })
+        .get();
+      rows = itemsRes.data || [];
+    } catch (e) {
+      if (!isCollectionMissing(e)) {
+        console.error('[order] 读取点单明细失败 ' + order._id, e.message || e);
+        continue;
+      }
+    }
+
+    const finalDishSummary = await buildFinalSummary(order.menuId, rows);
+    const now = new Date().toISOString();
+
+    try {
+      await db.collection('family_orders').doc(order._id).update({
+        data: {
+          status: 'closed',
+          closedAt: now,
+          finalSummary: Object.values(finalDishSummary),
+          totalParticipants: rows.length,
+          closedBy: 'system',
+          closeReason: 'legacy_cleanup',
+          updatedAt: now,
+        },
+      });
+      closed.push(order._id);
+    } catch (e) {
+      console.error('[order] 关闭点单失败 ' + order._id, e.message || e);
+    }
+  }
+
+  return ok({
+    closed: closed,
+    closedCount: closed.length,
+    hasMore: docs.length >= MAX_CLEANUP_BATCH,
+  });
+}
+
 /* ============================== 业务路由 ============================== */
 
 const handlers = {
@@ -758,6 +936,7 @@ const handlers = {
   getOrderSummary: handleGetOrderSummary,
   closeOrder: handleCloseOrder,
   deleteOrders: handleDeleteOrders,
+  cleanupOpenOrders: handleCleanupOpenOrders,
 
   /** 旧版桩 */
   submitOrderItem() {

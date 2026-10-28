@@ -1,5 +1,5 @@
 import { orderService } from '../../services/order';
-import { getErrorMessage } from '../../utils/cloud';
+import { getErrorMessage, getErrorCode } from '../../utils/cloud';
 import type { OrderItemSelection, OrderSummary } from '../../types/order';
 
 interface RecipeWithSelection {
@@ -184,7 +184,7 @@ Page({
     const result = await new Promise<boolean>((resolve) => {
       wx.showModal({
         title: '关闭点单',
-        content: '关闭后家庭成员将不能再修改选择，确定关闭？',
+        content: '关闭后家庭成员将不能再修改选择。需要所有家人都点完才能关闭，确定现在关闭？',
         success: (res) => resolve(res.confirm),
       });
     });
@@ -218,7 +218,13 @@ Page({
       wx.showToast({ title: '点单已关闭', icon: 'success' });
     } catch (error) {
       this.setData({ closing: false });
-      wx.showToast({ title: getErrorMessage(error, '关闭失败'), icon: 'none' });
+      const message = getErrorMessage(error, '关闭失败');
+      // 还有家人没点单：这条信息较长，用弹窗而不是 toast，避免被截断
+      if (getErrorCode(error) === 'ORDER_NOT_ALL_COMPLETED') {
+        wx.showModal({ title: '还不能关闭', content: message, showCancel: false });
+      } else {
+        wx.showToast({ title: message, icon: 'none' });
+      }
     }
   },
 

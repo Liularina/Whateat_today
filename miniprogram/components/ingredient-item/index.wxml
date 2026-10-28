@@ -1,4 +1,4 @@
-<view class="ingredient {{item.isExpired ? 'ingredient--expired' : ''}}">
+<view class="ingredient {{item.isExpired ? 'ingredient--expired' : ''}} {{item.isEmpty ? 'ingredient--empty' : ''}}">
   <view class="ingredient__main" bindtap="onEdit">
     <view class="ingredient__name">
       {{item.standardName}}
@@ -14,7 +14,7 @@
     </view>
   </view>
 
-  <view class="ingredient__qty">{{item.quantityText}}</view>
+  <view class="ingredient__qty {{item.isEmpty ? 'ingredient__qty--empty' : ''}}">{{item.quantityText}}</view>
 
   <view class="ingredient__ops">
     <view class="ingredient__op" catchtap="onConsume">消耗</view>

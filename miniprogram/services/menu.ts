@@ -44,13 +44,25 @@ export const menuService = {
     });
   },
 
-  /** 换一道菜 */
-  replaceMenuItem(menuId: string, recipeId: string, familyId: string, preferences?: string): Promise<ReplaceItemResult> {
+  /**
+   * 换一道菜。
+   *
+   * triedRecipeIds 传本次连续换菜已经试过、被用户否掉的菜，
+   * 服务端会排除它们，避免连点几次拿到同一道。
+   */
+  replaceMenuItem(
+    menuId: string,
+    recipeId: string,
+    familyId: string,
+    preferences?: string,
+    triedRecipeIds?: string[],
+  ): Promise<ReplaceItemResult> {
     return callFunction<ReplaceItemResult>('menu', 'replaceMenuItem', {
       menuId,
       recipeId,
       familyId,
       preferences,
+      triedRecipeIds: triedRecipeIds || [],
     }, { timeout: AI_REQUEST_TIMEOUT });
   },
 
